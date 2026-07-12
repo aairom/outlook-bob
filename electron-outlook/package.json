@@ -1,0 +1,42 @@
+{
+  "name": "outlook-folder-extractor",
+  "version": "1.0.0",
+  "description": "Pick Outlook folders and extract non-IBM recipients via Microsoft Graph API",
+  "main": "dist/main.js",
+  "scripts": {
+    "build": "tsc --project tsconfig.json",
+    "start": "npm run build && electron .",
+    "pack": "npm run build && electron-builder --mac"
+  },
+  "keywords": [],
+  "author": "Bob",
+  "license": "MIT",
+  "dependencies": {
+    "dotenv": "^16.4.5"
+  },
+  "devDependencies": {
+    "@types/node": "^22.15.30",
+    "electron": "^42.5.0",
+    "electron-builder": "^26.0.12",
+    "ts-node": "^10.9.2",
+    "typescript": "^5.8.3"
+  },
+  "build": {
+    "appId": "com.bob.outlook-folder-extractor",
+    "productName": "Outlook Folder Extractor",
+    "mac": {
+      "category": "public.app-category.productivity"
+    },
+    "files": [
+      "dist/**/*",
+      "src/renderer/**/*",
+      "output/.gitkeep"
+    ],
+    "extraResources": [
+      {
+        "from": "src/renderer",
+        "to": "renderer"
+      }
+    ]
+  }
+}

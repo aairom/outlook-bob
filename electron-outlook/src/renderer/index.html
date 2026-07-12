@@ -1,0 +1,660 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta http-equiv="Content-Security-Policy"
+        content="default-src 'none'; style-src 'unsafe-inline'; script-src 'unsafe-inline';" />
+  <title>Outlook Folder Extractor</title>
+  <style>
+    *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+    body {
+      font-family: -apple-system, "Segoe UI", system-ui, sans-serif;
+      font-size: 14px;
+      line-height: 1.6;
+      background: #1e1e2e;
+      color: #cdd6f4;
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 48px 24px 40px;
+      -webkit-app-region: drag;
+    }
+
+    /* ── Cards ── */
+    .card {
+      -webkit-app-region: no-drag;
+      background: #313244;
+      border: 1px solid #45475a;
+      border-radius: 12px;
+      padding: 22px 26px;
+      width: 100%;
+      max-width: 720px;
+      margin-bottom: 14px;
+    }
+
+    h1 { font-size: 18px; font-weight: 600; color: #cba6f7; margin-bottom: 2px; }
+    .subtitle { font-size: 12px; color: #6c7086; margin-bottom: 18px; }
+
+    .section-title {
+      font-size: 11px; font-weight: 600; text-transform: uppercase;
+      letter-spacing: 0.07em; color: #6c7086; margin-bottom: 12px;
+    }
+
+    /* ── Status badge ── */
+    #status-badge {
+      display: inline-flex; align-items: center; gap: 6px;
+      font-size: 12px; padding: 3px 10px; border-radius: 999px;
+      margin-bottom: 18px; border: 1px solid transparent;
+    }
+    #status-badge.authed   { background: #1e3a2f; border-color: #40a669; color: #a6e3a1; }
+    #status-badge.unauthed { background: #3a1e1e; border-color: #a64040; color: #f38ba8; }
+    #status-badge .dot { width: 7px; height: 7px; border-radius: 50%; background: currentColor; }
+
+    /* ── Buttons ── */
+    .btn-row { display: flex; gap: 10px; margin-top: 14px; flex-wrap: wrap; }
+
+    button {
+      -webkit-app-region: no-drag;
+      padding: 9px 18px; border: none; border-radius: 8px;
+      font-size: 13px; font-weight: 500; cursor: pointer;
+      transition: opacity 0.15s;
+    }
+    button:disabled { opacity: 0.35; cursor: default; }
+    button:not(:disabled):hover { opacity: 0.82; }
+
+    #btn-connect        { background: #45475a; color: #cdd6f4; }
+    #btn-load-folders   { background: #89b4fa; color: #1e1e2e; }
+    #btn-extract        { background: #cba6f7; color: #1e1e2e; }
+    #btn-open-output    { background: #a6e3a1; color: #1e1e2e; display: none; }
+    #btn-select-all     { background: #313244; color: #89b4fa; border: 1px solid #45475a;
+                          font-size: 12px; padding: 5px 12px; }
+    #btn-deselect-all   { background: #313244; color: #a6adc8; border: 1px solid #45475a;
+                          font-size: 12px; padding: 5px 12px; }
+
+    /* ── Date input ── */
+    label.field-label { display: block; font-size: 12px; color: #a6adc8; margin-bottom: 4px; }
+
+    input[type="date"] {
+      width: 100%; padding: 8px 12px; background: #1e1e2e;
+      border: 1px solid #45475a; border-radius: 8px; color: #cdd6f4;
+      font-size: 14px; outline: none;
+    }
+    input[type="date"]:focus { border-color: #cba6f7; }
+
+    /* ── Export format selector ── */
+    .format-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 8px;
+      margin-bottom: 18px;
+    }
+
+    .format-btn {
+      -webkit-app-region: no-drag;
+      display: flex; flex-direction: column; align-items: center; gap: 4px;
+      padding: 12px 8px; border-radius: 10px;
+      border: 2px solid #45475a; background: #1e1e2e;
+      cursor: pointer; transition: border-color 0.15s, background 0.15s;
+      font-size: 12px; color: #a6adc8;
+      user-select: none;
+    }
+    .format-btn .fmt-icon { font-size: 22px; }
+    .format-btn .fmt-name { font-weight: 600; color: #cdd6f4; font-size: 12px; }
+    .format-btn .fmt-desc { font-size: 10px; color: #6c7086; text-align: center; line-height: 1.3; }
+    .format-btn:hover   { border-color: #cba6f7; }
+    .format-btn.active  { border-color: #cba6f7; background: #2a2040; }
+
+    /* ── Field toggles ── */
+    .field-toggles {
+      display: flex; flex-wrap: wrap; gap: 8px;
+      margin-bottom: 4px;
+    }
+
+    .toggle-chip {
+      -webkit-app-region: no-drag;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 5px 12px; border-radius: 999px;
+      border: 1px solid #45475a; background: #1e1e2e;
+      font-size: 12px; color: #a6adc8; cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, color 0.15s;
+      user-select: none;
+    }
+    .toggle-chip input[type="checkbox"] { display: none; }
+    .toggle-chip.on  { border-color: #89b4fa; background: #1a2a3a; color: #89b4fa; }
+    .toggle-chip.on .chip-dot { background: #89b4fa; }
+    .chip-dot { width: 6px; height: 6px; border-radius: 50%; background: #45475a; flex-shrink: 0; }
+
+    /* domain filter row */
+    .domain-row {
+      display: flex; align-items: center; gap: 8px; flex-wrap: wrap;
+      margin-top: 10px; padding-top: 10px; border-top: 1px solid #45475a;
+      font-size: 12px; color: #a6adc8;
+    }
+    .domain-row input[type="checkbox"] {
+      -webkit-app-region: no-drag;
+      width: 14px; height: 14px; accent-color: #cba6f7; cursor: pointer;
+    }
+    .domain-input {
+      -webkit-app-region: no-drag;
+      padding: 4px 10px; background: #1e1e2e;
+      border: 1px solid #45475a; border-radius: 6px; color: #cdd6f4;
+      font-size: 12px; outline: none; width: 200px;
+    }
+    .domain-input:focus { border-color: #cba6f7; }
+    .domain-input:disabled { opacity: 0.35; }
+
+    /* hints shown/hidden per format */
+    .fields-hint {
+      font-size: 11px; color: #6c7086; margin-top: 6px; font-style: italic;
+    }
+
+    /* ── Folder tree ── */
+    #folder-card { display: none; }
+    #folder-tree-wrap {
+      background: #1e1e2e; border: 1px solid #45475a; border-radius: 8px;
+      padding: 10px 12px; max-height: 280px; overflow-y: auto;
+    }
+    .folder-node { user-select: none; }
+    .folder-row {
+      display: flex; align-items: center; gap: 6px;
+      padding: 4px 6px; border-radius: 6px; cursor: pointer;
+    }
+    .folder-row:hover { background: #313244; }
+    .folder-toggle {
+      width: 16px; height: 16px; display: flex; align-items: center;
+      justify-content: center; color: #6c7086; font-size: 11px;
+      cursor: pointer; flex-shrink: 0;
+    }
+    .folder-toggle.leaf { visibility: hidden; }
+    .folder-check {
+      -webkit-app-region: no-drag;
+      width: 15px; height: 15px; accent-color: #cba6f7;
+      flex-shrink: 0; cursor: pointer;
+    }
+    .folder-icon  { font-size: 14px; flex-shrink: 0; }
+    .folder-label { flex: 1; font-size: 13px; color: #cdd6f4; }
+    .folder-count { font-size: 11px; color: #6c7086; white-space: nowrap; }
+    .folder-children { padding-left: 22px; }
+    .folder-children.collapsed { display: none; }
+    #folder-loading { font-size: 13px; color: #89b4fa; padding: 8px 0; }
+    #folder-empty   { font-size: 13px; color: #6c7086; padding: 8px 0; display: none; }
+    .folder-selection-info { font-size: 12px; color: #a6adc8; margin-top: 8px; }
+    .folder-selection-info span { color: #cba6f7; font-weight: 600; }
+
+    /* ── Log ── */
+    #log-card { display: none; }
+    #log {
+      background: #1e1e2e; border: 1px solid #45475a; border-radius: 8px;
+      padding: 12px; height: 200px; overflow-y: auto;
+      font-family: "SF Mono", "Fira Code", monospace; font-size: 12px;
+      color: #a6adc8; white-space: pre-wrap; word-break: break-all;
+    }
+    .log-line       { padding: 1px 0; }
+    .log-line.ok    { color: #a6e3a1; }
+    .log-line.err   { color: #f38ba8; }
+    .log-line.info  { color: #89b4fa; }
+    #result-msg { margin-top: 10px; font-size: 13px; display: none; }
+    #result-msg.ok  { color: #a6e3a1; }
+    #result-msg.err { color: #f38ba8; }
+  </style>
+</head>
+<body>
+
+  <!-- ── Header card ── -->
+  <div class="card">
+    <h1>📬 Outlook Folder Extractor</h1>
+    <p class="subtitle">Select folders and export emails in your preferred format via Microsoft Graph API.</p>
+
+    <div id="status-badge" class="unauthed">
+      <span class="dot"></span>
+      <span id="status-text">Not authenticated</span>
+    </div>
+
+    <div class="btn-row" style="margin-top:0;">
+      <button id="btn-connect">Connect to Microsoft</button>
+      <button id="btn-load-folders" disabled>Load Folders</button>
+    </div>
+  </div>
+
+  <!-- ── Folder picker card ── -->
+  <div class="card" id="folder-card">
+    <p class="section-title">Select folders to scan</p>
+
+    <div style="display:flex; gap:8px; margin-bottom:10px;">
+      <button id="btn-select-all">Select all</button>
+      <button id="btn-deselect-all">Deselect all</button>
+    </div>
+
+    <div id="folder-tree-wrap">
+      <div id="folder-loading">Loading folders…</div>
+      <div id="folder-empty">No folders found.</div>
+      <div id="folder-tree"></div>
+    </div>
+
+    <p class="folder-selection-info">
+      <span id="selected-count">0</span> folder(s) selected
+    </p>
+  </div>
+
+  <!-- ── Export options card ── -->
+  <div class="card">
+    <p class="section-title">Export format</p>
+
+    <div class="format-grid">
+      <div class="format-btn active" data-format="recipients-csv">
+        <span class="fmt-icon">👤</span>
+        <span class="fmt-name">Recipients CSV</span>
+        <span class="fmt-desc">Unique email addresses &amp; names</span>
+      </div>
+      <div class="format-btn" data-format="emails-csv">
+        <span class="fmt-icon">📊</span>
+        <span class="fmt-name">Emails CSV</span>
+        <span class="fmt-desc">One row per message with selected fields</span>
+      </div>
+      <div class="format-btn" data-format="eml">
+        <span class="fmt-icon">📧</span>
+        <span class="fmt-name">EML Files</span>
+        <span class="fmt-desc">One .eml file per message, in folders</span>
+      </div>
+      <div class="format-btn" data-format="json">
+        <span class="fmt-icon">{ }</span>
+        <span class="fmt-name">JSON</span>
+        <span class="fmt-desc">Structured array of message objects</span>
+      </div>
+    </div>
+
+    <!-- Field toggles (hidden for recipients-csv) -->
+    <div id="field-toggles-section">
+      <p class="section-title" style="margin-bottom:8px;">Include fields</p>
+      <div class="field-toggles">
+        <label class="toggle-chip on" id="chip-from">
+          <input type="checkbox" id="chk-from" checked />
+          <span class="chip-dot"></span> From
+        </label>
+        <label class="toggle-chip on" id="chip-tocc">
+          <input type="checkbox" id="chk-tocc" checked />
+          <span class="chip-dot"></span> To / CC
+        </label>
+        <label class="toggle-chip on" id="chip-subject">
+          <input type="checkbox" id="chk-subject" checked />
+          <span class="chip-dot"></span> Subject
+        </label>
+        <label class="toggle-chip" id="chip-bodytext">
+          <input type="checkbox" id="chk-bodytext" />
+          <span class="chip-dot"></span> Body (plain text)
+        </label>
+        <label class="toggle-chip" id="chip-bodyhtml">
+          <input type="checkbox" id="chk-bodyhtml" />
+          <span class="chip-dot"></span> Body (HTML)
+        </label>
+        <label class="toggle-chip" id="chip-attachments">
+          <input type="checkbox" id="chk-attachments" />
+          <span class="chip-dot"></span> Attachments metadata
+        </label>
+      </div>
+      <p class="fields-hint" id="eml-hint" style="display:none;">
+        EML exports always include From, To/CC, Subject and Body — field toggles control extra metadata.
+      </p>
+    </div>
+
+    <!-- Domain filter -->
+    <div class="domain-row">
+      <input type="checkbox" id="chk-filter-domain" checked />
+      <label for="chk-filter-domain" style="-webkit-app-region:no-drag; cursor:pointer;">
+        Exclude addresses containing
+      </label>
+      <input type="text" id="excluded-domain-input" class="domain-input"
+             placeholder="e.g. .ibm.com" value=".ibm.com" />
+    </div>
+  </div>
+
+  <!-- ── Date + run card ── -->
+  <div class="card">
+    <label class="field-label" for="since-date">Scan emails since (optional)</label>
+    <input type="date" id="since-date" />
+
+    <div class="btn-row">
+      <button id="btn-extract" disabled>Run Extraction</button>
+      <button id="btn-open-output">Open Output</button>
+    </div>
+  </div>
+
+  <!-- ── Progress card ── -->
+  <div class="card" id="log-card">
+    <p class="section-title">Progress</p>
+    <div id="log"></div>
+    <div id="result-msg"></div>
+  </div>
+
+  <script>
+    const api = window.electronAPI;
+
+    // ── DOM refs ──────────────────────────────────────────────────────────────
+    const statusBadge     = document.getElementById("status-badge");
+    const statusText      = document.getElementById("status-text");
+    const btnConnect      = document.getElementById("btn-connect");
+    const btnLoadFolders  = document.getElementById("btn-load-folders");
+    const btnSelectAll    = document.getElementById("btn-select-all");
+    const btnDeselectAll  = document.getElementById("btn-deselect-all");
+    const btnExtract      = document.getElementById("btn-extract");
+    const btnOpenOutput   = document.getElementById("btn-open-output");
+    const sinceDate       = document.getElementById("since-date");
+    const folderCard      = document.getElementById("folder-card");
+    const folderLoading   = document.getElementById("folder-loading");
+    const folderEmpty     = document.getElementById("folder-empty");
+    const folderTree      = document.getElementById("folder-tree");
+    const selectedCount   = document.getElementById("selected-count");
+    const logCard         = document.getElementById("log-card");
+    const logEl           = document.getElementById("log");
+    const resultMsg       = document.getElementById("result-msg");
+    const fieldSection    = document.getElementById("field-toggles-section");
+    const emlHint         = document.getElementById("eml-hint");
+    const chkFilterDomain      = document.getElementById("chk-filter-domain");
+    const excludedDomainInput  = document.getElementById("excluded-domain-input");
+
+    // ── State ─────────────────────────────────────────────────────────────────
+    let lastOutputPath = "";
+    let cachedFolderTree = [];
+    let selectedFormat = "recipients-csv";
+
+    // ── Format selector ───────────────────────────────────────────────────────
+    document.querySelectorAll(".format-btn").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        document.querySelectorAll(".format-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        selectedFormat = btn.dataset.format;
+        updateFieldVisibility();
+      });
+    });
+
+    function updateFieldVisibility() {
+      const isRecipients = selectedFormat === "recipients-csv";
+      const isEml        = selectedFormat === "eml";
+      fieldSection.style.display = isRecipients ? "none" : "block";
+      emlHint.style.display      = isEml        ? "block" : "none";
+    }
+    updateFieldVisibility();
+
+    // Enable/disable domain input with the checkbox
+    chkFilterDomain.addEventListener("change", () => {
+      excludedDomainInput.disabled = !chkFilterDomain.checked;
+    });
+
+    // ── Toggle chips ──────────────────────────────────────────────────────────
+    document.querySelectorAll(".toggle-chip").forEach((chip) => {
+      chip.addEventListener("click", () => {
+        const cb = chip.querySelector("input[type=checkbox]");
+        cb.checked = !cb.checked;
+        chip.classList.toggle("on", cb.checked);
+      });
+    });
+
+    function getExportParams() {
+      return {
+        exportFormat:           selectedFormat,
+        includeFrom:            document.getElementById("chk-from").checked,
+        includeToCC:            document.getElementById("chk-tocc").checked,
+        includeSubject:         document.getElementById("chk-subject").checked,
+        includeBodyText:        document.getElementById("chk-bodytext").checked,
+        includeBodyHtml:        document.getElementById("chk-bodyhtml").checked,
+        includeAttachmentsMeta: document.getElementById("chk-attachments").checked,
+        filterExcludedDomain:   chkFilterDomain.checked,
+        excludedDomain:         excludedDomainInput.value.trim() || ".ibm.com",
+      };
+    }
+
+    // ── Auth helpers ──────────────────────────────────────────────────────────
+    function setAuthenticated(authed) {
+      if (authed) {
+        statusBadge.className = "authed";
+        statusText.textContent = "Connected";
+        btnConnect.textContent = "Reconnect";
+        btnLoadFolders.disabled = false;
+      } else {
+        statusBadge.className = "unauthed";
+        statusText.textContent = "Not authenticated";
+        btnConnect.textContent = "Connect to Microsoft";
+        btnLoadFolders.disabled = true;
+        btnExtract.disabled = true;
+      }
+    }
+
+    // ── Log helpers ───────────────────────────────────────────────────────────
+    function appendLog(text, cls) {
+      logCard.style.display = "block";
+      const line = document.createElement("div");
+      line.className = "log-line" + (cls ? " " + cls : "");
+      line.textContent = text;
+      logEl.appendChild(line);
+      logEl.scrollTop = logEl.scrollHeight;
+    }
+
+    function clearLog() {
+      logEl.innerHTML = "";
+      resultMsg.style.display = "none";
+      resultMsg.className = "";
+      btnOpenOutput.style.display = "none";
+    }
+
+    function classifyLine(msg) {
+      if (/error|fail/i.test(msg)) return "err";
+      if (/done|complete|saved|exported|✅/i.test(msg)) return "ok";
+      return "info";
+    }
+
+    // ── Folder tree builder ───────────────────────────────────────────────────
+    function getCheckedFolderIds() {
+      return Array.from(document.querySelectorAll(".folder-check:checked")).map(cb => cb.dataset.id);
+    }
+
+    function updateSelectedCount() {
+      const n = getCheckedFolderIds().length;
+      selectedCount.textContent = n;
+      btnExtract.disabled = n === 0;
+    }
+
+    const FOLDER_ICONS = {
+      "SentItems": "📤", "Inbox": "📥", "Drafts": "📝",
+      "DeletedItems": "🗑️", "JunkEmail": "🚫", "Archive": "📦", "Outbox": "📨",
+    };
+    function folderIcon(name) { return FOLDER_ICONS[name] || "📁"; }
+
+    function buildFolderNode(folder) {
+      const node = document.createElement("div");
+      node.className = "folder-node";
+      const row = document.createElement("div");
+      row.className = "folder-row";
+
+      const toggle = document.createElement("span");
+      toggle.className = "folder-toggle" + (folder.children?.length ? "" : " leaf");
+      toggle.textContent = "▶";
+
+      const cb = document.createElement("input");
+      cb.type = "checkbox"; cb.className = "folder-check"; cb.dataset.id = folder.id;
+      cb.addEventListener("change", updateSelectedCount);
+
+      const icon = document.createElement("span");
+      icon.className = "folder-icon"; icon.textContent = folderIcon(folder.displayName);
+
+      const label = document.createElement("span");
+      label.className = "folder-label"; label.textContent = folder.displayName;
+
+      const count = document.createElement("span");
+      count.className = "folder-count";
+      if (folder.totalItemCount > 0) count.textContent = folder.totalItemCount.toLocaleString() + " items";
+
+      row.append(toggle, cb, icon, label, count);
+      node.appendChild(row);
+
+      if (folder.children?.length) {
+        const childrenDiv = document.createElement("div");
+        childrenDiv.className = "folder-children collapsed";
+        folder.children.forEach(c => childrenDiv.appendChild(buildFolderNode(c)));
+        node.appendChild(childrenDiv);
+
+        const expand = () => {
+          const collapsed = childrenDiv.classList.toggle("collapsed");
+          toggle.textContent = collapsed ? "▶" : "▼";
+        };
+        toggle.addEventListener("click", e => { e.stopPropagation(); expand(); });
+        row.addEventListener("click", e => { if (e.target !== cb) expand(); });
+      }
+      return node;
+    }
+
+    function renderFolderTree(folders) {
+      folderTree.innerHTML = "";
+      folderLoading.style.display = "none";
+      if (!folders?.length) { folderEmpty.style.display = "block"; return; }
+      folders.forEach(f => folderTree.appendChild(buildFolderNode(f)));
+      updateSelectedCount();
+    }
+
+    // ── Select / Deselect all ─────────────────────────────────────────────────
+    btnSelectAll.addEventListener("click", () => {
+      document.querySelectorAll(".folder-check").forEach(cb => cb.checked = true);
+      updateSelectedCount();
+    });
+    btnDeselectAll.addEventListener("click", () => {
+      document.querySelectorAll(".folder-check").forEach(cb => cb.checked = false);
+      updateSelectedCount();
+    });
+
+    // ── Connect ───────────────────────────────────────────────────────────────
+    btnConnect.addEventListener("click", async () => {
+      btnConnect.disabled = true;
+      btnConnect.textContent = "Opening browser…";
+      clearLog();
+      appendLog("Opening Microsoft login…", "info");
+
+      api.removeAllListeners("progress");
+      api.removeAllListeners("error");
+      api.onProgress(msg => appendLog(msg, classifyLine(msg)));
+      api.onError(msg => {
+        appendLog("Error: " + msg, "err");
+        btnConnect.disabled = false;
+        setAuthenticated(false);
+      });
+
+      const { authenticated } = await api.connect();
+      setAuthenticated(authenticated);
+      btnConnect.disabled = false;
+    });
+
+    // ── Load folders ──────────────────────────────────────────────────────────
+    btnLoadFolders.addEventListener("click", async () => {
+      btnLoadFolders.disabled = true;
+      btnLoadFolders.textContent = "Loading…";
+      folderCard.style.display = "block";
+      folderLoading.style.display = "block";
+      folderEmpty.style.display = "none";
+      folderTree.innerHTML = "";
+
+      api.removeAllListeners("progress");
+      api.removeAllListeners("error");
+      api.onProgress(msg => appendLog(msg, "info"));
+      api.onError(msg => {
+        appendLog("Error loading folders: " + msg, "err");
+        folderLoading.style.display = "none";
+        folderEmpty.style.display = "block";
+      });
+
+      const { folders } = await api.listFolders();
+      cachedFolderTree = folders;
+      renderFolderTree(folders);
+      btnLoadFolders.disabled = false;
+      btnLoadFolders.textContent = "Refresh Folders";
+    });
+
+    // ── Run extraction ────────────────────────────────────────────────────────
+    btnExtract.addEventListener("click", async () => {
+      const folderIds = getCheckedFolderIds();
+      if (!folderIds.length) return;
+
+      const exportParams = getExportParams();
+
+      // Validate: non-recipients formats need at least one field
+      if (exportParams.exportFormat !== "recipients-csv" && exportParams.exportFormat !== "eml") {
+        const anyField = exportParams.includeFrom || exportParams.includeToCC ||
+                         exportParams.includeSubject || exportParams.includeBodyText ||
+                         exportParams.includeBodyHtml || exportParams.includeAttachmentsMeta;
+        if (!anyField) {
+          appendLog("⚠️  Please select at least one field to include.", "err");
+          logCard.style.display = "block";
+          return;
+        }
+      }
+
+      btnExtract.disabled = true;
+      btnConnect.disabled = true;
+      btnLoadFolders.disabled = true;
+      btnOpenOutput.style.display = "none";
+      clearLog();
+
+      api.removeAllListeners("progress");
+      api.removeAllListeners("done");
+      api.removeAllListeners("error");
+
+      api.onProgress(msg => appendLog(msg, classifyLine(msg)));
+
+      api.onDone((outputPath, count, format) => {
+        btnExtract.disabled = false;
+        btnConnect.disabled = false;
+        btnLoadFolders.disabled = false;
+
+        if (count === 0) {
+          resultMsg.style.display = "block";
+          resultMsg.className = "ok";
+          resultMsg.textContent = "✅ No matching messages found.";
+          return;
+        }
+
+        lastOutputPath = outputPath;
+        btnOpenOutput.style.display = "inline-block";
+
+        const labels = {
+          "recipients-csv": `${count} unique recipients saved to CSV`,
+          "emails-csv":     `${count} messages saved to CSV`,
+          "eml":            `${count} .eml files exported`,
+          "json":           `${count} messages saved to JSON`,
+        };
+        resultMsg.style.display = "block";
+        resultMsg.className = "ok";
+        resultMsg.textContent = "✅ Done — " + (labels[format] || `${count} items exported`);
+        appendLog("Saved → " + outputPath, "ok");
+      });
+
+      api.onError(msg => {
+        btnExtract.disabled = false;
+        btnConnect.disabled = false;
+        btnLoadFolders.disabled = false;
+        resultMsg.style.display = "block";
+        resultMsg.className = "err";
+        resultMsg.textContent = "❌ Error: " + msg;
+        appendLog("Error: " + msg, "err");
+      });
+
+      await api.startExtraction({
+        folderIds,
+        folderTree: cachedFolderTree,
+        since: sinceDate.value || undefined,
+        exportParams,
+      });
+    });
+
+    // ── Open output ───────────────────────────────────────────────────────────
+    btnOpenOutput.addEventListener("click", () => {
+      if (lastOutputPath) api.openFile(lastOutputPath);
+    });
+
+    // ── Boot ──────────────────────────────────────────────────────────────────
+    (async () => {
+      const { authenticated } = await api.getStatus();
+      setAuthenticated(authenticated);
+    })();
+  </script>
+</body>
+</html>
