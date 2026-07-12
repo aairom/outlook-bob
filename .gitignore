@@ -1,6 +1,9 @@
 # Environment files — never commit secrets
 .env
 
+# Node modules
+node_modules/
+
 # Virtual environment
 .venv/
 venv/
