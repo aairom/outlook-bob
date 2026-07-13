@@ -104,12 +104,30 @@ and renders it with item counts and expand/collapse controls.
 | **Emails CSV** | One row per message with your selected fields |
 | **EML Files** | One `.eml` file per message, organised by folder |
 | **JSON** | Structured array of message objects |
+| **Attachments** | Attached files saved as binary files, sub-foldered by mailbox folder name; filterable by file type |
 
 ### Step 4 — Select fields *(CSV / JSON / EML)*
 Toggle which fields to include per message:
 **From · To/CC · Subject · Body (plain text) · Body (HTML) · Attachments metadata**
 
 > EML exports always include From, To/CC, Subject, and Body — field toggles apply to extra metadata only.
+> Field toggles are not shown for **Recipients CSV** and **Attachments** (not applicable).
+
+### Step 4b — Attachment file types *(Attachments format only)*
+When the **Attachments** format is selected, a file-type picker appears below the flagged filter:
+
+| Chip | Saved extensions |
+|---|---|
+| **All types** *(default, green)* | every file |
+| **📄 PDF** | `.pdf` |
+| **📝 Word** | `.doc` `.docx` `.dot` `.dotx` `.odt` |
+| **📊 PowerPoint** | `.ppt` `.pptx` `.pot` `.potx` `.pps` `.ppsx` `.odp` |
+| **📈 Excel** | `.xls` `.xlsx` `.xlsm` `.xlt` `.xltx` `.ods` `.csv` |
+| **🖼️ Images** | `.jpg` `.jpeg` `.png` `.gif` `.bmp` `.webp` `.tiff` `.svg` `.heic` |
+
+- Select **All types** to save every attachment regardless of extension.
+- Select one or more specific types to save only those (combinations are allowed — e.g. PDF + Images).
+- Selecting a specific type automatically deselects **All types**, and deselecting all specific types reverts to **All types**.
 
 ### Step 5 — Domain filter
 The **"Exclude addresses containing"** field pre-fills from `EXCLUDED_DOMAIN` in `.env`.
@@ -148,12 +166,21 @@ output/
 ├── recipients_20250625_143022.csv          # Recipients CSV
 ├── emails_20250625_143022.csv              # Emails CSV
 ├── emails_20250625_143022.json             # JSON
-└── eml_export_20250625_143022/             # EML files
+├── eml_export_20250625_143022/             # EML files
+│   ├── Sent Items/
+│   │   └── 2025-06-25T14-30-22_<id>.eml
+│   └── Inbox/
+│       └── 2025-06-25T10-00-00_<id>.eml
+└── attachments_20250625_143022/            # Attachments export
     ├── Sent Items/
-    │   └── 2025-06-25T14-30-22_<id>.eml
+    │   ├── report.xlsx
+    │   └── photo.jpg
     └── Inbox/
-        └── 2025-06-25T10-00-00_<id>.eml
+        └── invoice.pdf
 ```
+
+> Duplicate filenames within the same mailbox folder are automatically deduplicated:
+> `report.xlsx`, `report_1.xlsx`, `report_2.xlsx`, …
 
 ### Recipients CSV columns
 

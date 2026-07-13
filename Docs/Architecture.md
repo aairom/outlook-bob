@@ -89,14 +89,15 @@ flowchart TD
     B -- Yes --> D
     D --> E[Load Folders\nGET /me/mailFolders recursive]
     E --> F[Folder tree rendered\ncheckboxes + item counts]
-    F --> G[User picks folders\n+ export format\n+ field toggles\n+ domain filter]
+    F --> G[User picks folders\n+ export format\n+ field toggles\n+ domain filter\n+ flagged filter]
     G --> H[Run Extraction\nGET messages per folder, paginated\n$select only requested fields]
     H --> I{Export format}
     I --> J1["Recipients CSV\nDeduplicate addresses\noutput/recipients_TIMESTAMP.csv"]
     I --> J2["Emails CSV\nOne row per message\noutput/emails_TIMESTAMP.csv"]
     I --> J3["JSON\nStructured array\noutput/emails_TIMESTAMP.json"]
     I --> J4["EML Files\nOne .eml per message\noutput/eml_export_TIMESTAMP/FolderName/"]
-    J1 & J2 & J3 & J4 --> K([Open Output\nshell.openPath])
+    I --> J5["Attachments\nBinary files by folder\noutput/attachments_TIMESTAMP/FolderName/"]
+    J1 & J2 & J3 & J4 & J5 --> K([Open Output\nshell.openPath])
 ```
 
 ---
@@ -120,7 +121,7 @@ flowchart TD
 
 ```typescript
 interface ExportParams {
-  exportFormat:           "recipients-csv" | "emails-csv" | "eml" | "json";
+  exportFormat:           "recipients-csv" | "emails-csv" | "eml" | "json" | "attachments";
   includeFrom:            boolean;
   includeToCC:            boolean;
   includeSubject:         boolean;
@@ -130,8 +131,37 @@ interface ExportParams {
   filterExcludedDomain:   boolean;
   excludedDomain:         string;   // e.g. ".ibm.com" — editable in the UI
   flaggedOnly:            boolean;  // when true, skip messages whose flag.flagStatus ≠ "flagged"
+  attachmentTypes:        string[]; // [] or ["all"] = all types; else subset of:
+                                    //   "pdf" | "docx" | "pptx" | "xlsx" | "images"
+  // note: field toggles are ignored for "recipients-csv" and "attachments" formats
 }
 ```
+
+### Attachment type → file extension mapping
+
+| UI label | Matched extensions |
+|---|---|
+| **All types** | _(every extension)_ |
+| **PDF** | `.pdf` |
+| **Word** | `.doc` `.docx` `.dot` `.dotx` `.odt` |
+| **PowerPoint** | `.ppt` `.pptx` `.pot` `.potx` `.pps` `.ppsx` `.odp` |
+| **Excel** | `.xls` `.xlsx` `.xlsm` `.xlt` `.xltx` `.ods` `.csv` |
+| **Images** | `.jpg` `.jpeg` `.png` `.gif` `.bmp` `.webp` `.tiff` `.tif` `.svg` `.heic` `.heif` |
+
+---
+
+## Graph API — Attachments Download Strategy
+
+For the `attachments` export format the main process makes two Graph calls per message that has attachments:
+
+1. **`GET /me/messages/{id}/attachments?$select=id,name,contentType,@microsoft.graph.downloadUrl`**
+   Returns the attachment list. `fileAttachment` items include `contentBytes` (base64) inline.
+
+2. **`GET /me/messages/{id}/attachments/{attId}/$value`**
+   Used as a fallback when `contentBytes` is absent (large files, `itemAttachment` sub-items).
+
+Files are written to `output/attachments_TIMESTAMP/<FolderName>/<filename>`.
+Duplicate filenames within the same folder are disambiguated by appending `_1`, `_2`, … before the extension.
 
 ---
 

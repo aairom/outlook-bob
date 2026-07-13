@@ -87,7 +87,7 @@
     /* ── Export format selector ── */
     .format-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: 8px;
       margin-bottom: 18px;
     }
@@ -160,6 +160,29 @@
     .fields-hint {
       font-size: 11px; color: #6c7086; margin-top: 6px; font-style: italic;
     }
+
+    /* ── Attachment type selector ── */
+    #att-type-section { margin-bottom: 4px; }
+
+    .att-type-grid {
+      display: flex; flex-wrap: wrap; gap: 8px; margin-top: 8px;
+    }
+
+    .att-type-chip {
+      -webkit-app-region: no-drag;
+      display: inline-flex; align-items: center; gap: 6px;
+      padding: 6px 14px; border-radius: 999px;
+      border: 1px solid #45475a; background: #1e1e2e;
+      font-size: 12px; color: #a6adc8; cursor: pointer;
+      transition: border-color 0.15s, background 0.15s, color 0.15s;
+      user-select: none;
+    }
+    .att-type-chip input[type="checkbox"] { display: none; }
+    .att-type-chip.on  { border-color: #f9e2af; background: #2a2010; color: #f9e2af; }
+    .att-type-chip.on .chip-dot { background: #f9e2af; }
+    /* "All" chip uses accent colour */
+    .att-type-chip.all-chip.on { border-color: #a6e3a1; background: #1a2e1a; color: #a6e3a1; }
+    .att-type-chip.all-chip.on .chip-dot { background: #a6e3a1; }
 
     /* ── Folder tree ── */
     #folder-card { display: none; }
@@ -274,6 +297,11 @@
         <span class="fmt-name">JSON</span>
         <span class="fmt-desc">Structured array of message objects</span>
       </div>
+      <div class="format-btn" data-format="attachments">
+        <span class="fmt-icon">📎</span>
+        <span class="fmt-name">Attachments</span>
+        <span class="fmt-desc">Save attached files by mailbox folder</span>
+      </div>
     </div>
 
     <!-- Field toggles (hidden for recipients-csv) -->
@@ -326,6 +354,37 @@
       <label for="chk-flagged-only" style="-webkit-app-region:no-drag; cursor:pointer;">
         🚩 Flagged emails only
       </label>
+    </div>
+
+    <!-- Attachment type filter (shown only for "attachments" format) -->
+    <div id="att-type-section" style="display:none;">
+      <p class="section-title" style="margin-top:14px; margin-bottom:0;">Attachment file types</p>
+      <div class="att-type-grid">
+        <label class="att-type-chip all-chip on" id="chip-att-all">
+          <input type="checkbox" id="chk-att-all" checked />
+          <span class="chip-dot"></span> All types
+        </label>
+        <label class="att-type-chip" id="chip-att-pdf">
+          <input type="checkbox" id="chk-att-pdf" />
+          <span class="chip-dot"></span> 📄 PDF
+        </label>
+        <label class="att-type-chip" id="chip-att-docx">
+          <input type="checkbox" id="chk-att-docx" />
+          <span class="chip-dot"></span> 📝 Word
+        </label>
+        <label class="att-type-chip" id="chip-att-pptx">
+          <input type="checkbox" id="chk-att-pptx" />
+          <span class="chip-dot"></span> 📊 PowerPoint
+        </label>
+        <label class="att-type-chip" id="chip-att-xlsx">
+          <input type="checkbox" id="chk-att-xlsx" />
+          <span class="chip-dot"></span> 📈 Excel
+        </label>
+        <label class="att-type-chip" id="chip-att-images">
+          <input type="checkbox" id="chk-att-images" />
+          <span class="chip-dot"></span> 🖼️ Images
+        </label>
+      </div>
     </div>
   </div>
 
@@ -388,11 +447,15 @@
       });
     });
 
+    const attTypeSection = document.getElementById("att-type-section");
+
     function updateFieldVisibility() {
-      const isRecipients = selectedFormat === "recipients-csv";
-      const isEml        = selectedFormat === "eml";
-      fieldSection.style.display = isRecipients ? "none" : "block";
-      emlHint.style.display      = isEml        ? "block" : "none";
+      const isRecipients  = selectedFormat === "recipients-csv";
+      const isEml         = selectedFormat === "eml";
+      const isAttachments = selectedFormat === "attachments";
+      fieldSection.style.display    = (isRecipients || isAttachments) ? "none" : "block";
+      emlHint.style.display         = isEml         ? "block" : "none";
+      attTypeSection.style.display  = isAttachments ? "block" : "none";
     }
     updateFieldVisibility();
 
@@ -401,7 +464,7 @@
       excludedDomainInput.disabled = !chkFilterDomain.checked;
     });
 
-    // ── Toggle chips ──────────────────────────────────────────────────────────
+    // ── Toggle chips (field toggles) ──────────────────────────────────────────
     document.querySelectorAll(".toggle-chip").forEach((chip) => {
       chip.addEventListener("click", () => {
         const cb = chip.querySelector("input[type=checkbox]");
@@ -409,6 +472,51 @@
         chip.classList.toggle("on", cb.checked);
       });
     });
+
+    // ── Attachment type chips ─────────────────────────────────────────────────
+    const attAllChip  = document.getElementById("chip-att-all");
+    const attAllChk   = document.getElementById("chk-att-all");
+    const attSpecific = ["pdf","docx","pptx","xlsx","images"];
+
+    function syncAttAllChip() {
+      // If every specific type is unchecked, revert to "All"
+      const anyOn = attSpecific.some(t => document.getElementById("chk-att-" + t).checked);
+      if (!anyOn) {
+        attAllChk.checked = true;
+        attAllChip.classList.add("on");
+      }
+    }
+
+    attAllChip.addEventListener("click", () => {
+      // Selecting "All" clears every specific type
+      attAllChk.checked = true;
+      attAllChip.classList.add("on");
+      attSpecific.forEach(t => {
+        document.getElementById("chk-att-" + t).checked = false;
+        document.getElementById("chip-att-" + t).classList.remove("on");
+      });
+    });
+
+    attSpecific.forEach(t => {
+      const chip = document.getElementById("chip-att-" + t);
+      const chk  = document.getElementById("chk-att-" + t);
+      chip.addEventListener("click", () => {
+        chk.checked = !chk.checked;
+        chip.classList.toggle("on", chk.checked);
+        if (chk.checked) {
+          // Deactivate "All" when a specific type is chosen
+          attAllChk.checked = false;
+          attAllChip.classList.remove("on");
+        } else {
+          syncAttAllChip();
+        }
+      });
+    });
+
+    function getAttachmentTypes() {
+      if (attAllChk.checked) return [];           // empty = all
+      return attSpecific.filter(t => document.getElementById("chk-att-" + t).checked);
+    }
 
     function getExportParams() {
       return {
@@ -422,6 +530,7 @@
         filterExcludedDomain:   chkFilterDomain.checked,
         excludedDomain:         excludedDomainInput.value.trim() || ".ibm.com",
         flaggedOnly:            document.getElementById("chk-flagged-only").checked,
+        attachmentTypes:        getAttachmentTypes(),
       };
     }
 
@@ -639,6 +748,7 @@
           "emails-csv":     `${count} messages saved to CSV`,
           "eml":            `${count} .eml files exported`,
           "json":           `${count} messages saved to JSON`,
+          "attachments":    `${count} attachment file(s) saved`,
         };
         resultMsg.style.display = "block";
         resultMsg.className = "ok";

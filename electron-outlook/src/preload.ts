@@ -9,7 +9,7 @@ interface MailFolder {
 }
 
 export interface ExportParams {
-  exportFormat: "recipients-csv" | "emails-csv" | "eml" | "json";
+  exportFormat: "recipients-csv" | "emails-csv" | "eml" | "json" | "attachments";
   includeFrom:            boolean;
   includeToCC:            boolean;
   includeSubject:         boolean;
@@ -19,6 +19,8 @@ export interface ExportParams {
   filterExcludedDomain:   boolean;
   excludedDomain:         string;
   flaggedOnly:            boolean;
+  /** File-type filter for "attachments" format. Empty array = save all types. */
+  attachmentTypes:        string[];
 }
 
 contextBridge.exposeInMainWorld("electronAPI", {

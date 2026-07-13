@@ -19,6 +19,7 @@ flowchart TD
     I -- Emails CSV --> J2[One row per message\noutput/emails_TIMESTAMP.csv]
     I -- EML Files --> J3[One .eml per message\noutput/eml_export_TIMESTAMP/]
     I -- JSON --> J4[Structured array\noutput/emails_TIMESTAMP.json]
+    I -- Attachments --> J5[Binary files by folder\noutput/attachments_TIMESTAMP/FolderName/]
 ```
 
 ## Export Formats
@@ -29,6 +30,7 @@ flowchart TD
 | **Emails CSV** | One row per message, configurable fields | Spreadsheet analysis |
 | **EML Files** | One `.eml` file per message, organised by folder | Archive / import into another mail client |
 | **JSON** | Structured array of message objects | Data processing / scripting |
+| **Attachments** | Binary attachment files saved by mailbox folder, filterable by type (PDF, Word, PowerPoint, Excel, Images) | Extract specific file types from emails |
 
 ## Field Options (CSV / JSON / EML)
 
