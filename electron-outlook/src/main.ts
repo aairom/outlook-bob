@@ -565,9 +565,11 @@ async function runEmailsCsvExport(
       const { name: fromName, email: fromEmail } = extractAddress(fromEa);
       if (params.filterExcludedDomain && fromEmail && isExcluded(fromEmail, params.excludedDomain)) continue;
 
-      const bodyObj = msg["body"] as Record<string,string> | undefined;
-      const isHtml  = bodyObj?.["contentType"] === "html";
+      const bodyObj     = msg["body"] as Record<string,string> | undefined;
+      const isHtml      = bodyObj?.["contentType"] === "html";
       const bodyContent = bodyObj?.["content"] ?? "";
+      // Plain-text view: strip HTML tags when the server returned HTML
+      const bodyPlain   = isHtml ? bodyContent.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim() : bodyContent;
 
       let attachmentsStr = "";
       if (params.includeAttachmentsMeta && msg["hasAttachments"]) {
@@ -583,9 +585,9 @@ async function runEmailsCsvExport(
         esc(params.includeToCC    ? recipientListStr((msg["toRecipients"] as Array<Record<string,unknown>>|undefined) ?? []) : ""),
         esc(params.includeToCC    ? recipientListStr((msg["ccRecipients"] as Array<Record<string,unknown>>|undefined) ?? []) : ""),
         esc(params.includeSubject ? String(msg["subject"] ?? "") : ""),
-        esc(params.includeBodyText && !isHtml ? bodyContent : ""),
-        esc(params.includeBodyHtml && isHtml  ? bodyContent : ""),
-        esc(params.includeAttachmentsMeta     ? attachmentsStr : ""),
+        esc(params.includeBodyText ? bodyPlain   : ""),
+        esc(params.includeBodyHtml ? bodyContent : ""),
+        esc(params.includeAttachmentsMeta ? attachmentsStr : ""),
         esc(folder.displayName),
       ].join(","));
     }
@@ -654,7 +656,11 @@ async function runJsonExport(
       const { name: fromName, email: fromEmail } = extractAddress(fromEa);
       if (params.filterExcludedDomain && fromEmail && isExcluded(fromEmail, params.excludedDomain)) continue;
 
-      const bodyObj = msg["body"] as Record<string,string> | undefined;
+      const bodyObj     = msg["body"] as Record<string,string> | undefined;
+      const isHtml      = bodyObj?.["contentType"] === "html";
+      const bodyContent = bodyObj?.["content"] ?? "";
+      const bodyPlain   = isHtml ? bodyContent.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim() : bodyContent;
+
       const rec: Record<string, unknown> = {
         messageId:    msg["id"],
         sentDateTime: msg["sentDateTime"],
@@ -666,8 +672,8 @@ async function runJsonExport(
         rec["ccRecipients"] = recipientListStr((msg["ccRecipients"] as Array<Record<string,unknown>>|undefined) ?? []);
       }
       if (params.includeSubject)  rec["subject"]  = msg["subject"];
-      if (params.includeBodyText) rec["bodyText"]  = bodyObj?.["contentType"] !== "html" ? (bodyObj?.["content"] ?? "") : "";
-      if (params.includeBodyHtml) rec["bodyHtml"]  = bodyObj?.["contentType"] === "html"  ? (bodyObj?.["content"] ?? "") : "";
+      if (params.includeBodyText) rec["bodyText"]  = bodyPlain;
+      if (params.includeBodyHtml) rec["bodyHtml"]  = bodyContent;
       if (params.includeAttachmentsMeta && msg["hasAttachments"])
         rec["attachments"] = await fetchAttachmentsMeta(token, msg["id"] as string);
 
@@ -860,6 +866,7 @@ async function runSqliteExport(
       const bodyObj     = msg["body"] as Record<string,string> | undefined;
       const isHtml      = bodyObj?.["contentType"] === "html";
       const bodyContent = bodyObj?.["content"] ?? "";
+      const bodyPlain   = isHtml ? bodyContent.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim() : bodyContent;
 
       let attachmentsStr = "";
       if (params.includeAttachmentsMeta && msg["hasAttachments"])
@@ -874,8 +881,8 @@ async function runSqliteExport(
         to_recipients:  params.includeToCC    ? recipientListStr((msg["toRecipients"] as Array<Record<string,unknown>>|undefined) ?? []) : "",
         cc_recipients:  params.includeToCC    ? recipientListStr((msg["ccRecipients"] as Array<Record<string,unknown>>|undefined) ?? []) : "",
         subject:        params.includeSubject ? String(msg["subject"] ?? "") : "",
-        body_text:      params.includeBodyText && !isHtml ? bodyContent : "",
-        body_html:      params.includeBodyHtml && isHtml  ? bodyContent : "",
+        body_text:      params.includeBodyText ? bodyPlain   : "",
+        body_html:      params.includeBodyHtml ? bodyContent : "",
         attachments:    attachmentsStr,
         exported_at:    exportedAt,
       });
