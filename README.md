@@ -19,7 +19,8 @@ flowchart TD
     I -- Emails CSV --> J2[One row per message\noutput/emails_TIMESTAMP.csv]
     I -- EML Files --> J3[One .eml per message\noutput/eml_export_TIMESTAMP/]
     I -- JSON --> J4[Structured array\noutput/emails_TIMESTAMP.json]
-    J1 & J2 & J3 & J4 -->|saveAttachments=true| J5[Attachment files by folder\noutput/attachments_TIMESTAMP/FolderName/\nfilterable by type]
+    I -- SQLite --> J5[Persistent DB — idempotent upsert\noutput/emails.sqlite]
+    J1 & J2 & J3 & J4 & J5 -->|saveAttachments=true| J6[Attachment files by folder\noutput/attachments_TIMESTAMP/FolderName/\nfilterable by type]
 ```
 
 ## Export Formats
@@ -30,8 +31,9 @@ flowchart TD
 | **Emails CSV** | One row per message, configurable fields | Spreadsheet analysis |
 | **EML Files** | One `.eml` file per message, organised by folder | Archive / import into another mail client |
 | **JSON** | Structured array of message objects | Data processing / scripting |
+| **SQLite** | Persistent `output/emails.sqlite` database — idempotent (re-run safe, no duplicates) | Queryable store, incremental syncs |
 
-## Field Options (CSV / JSON / EML)
+## Field Options (CSV / JSON / SQLite / EML)
 
 Toggle which fields to include per message:
 
@@ -82,16 +84,21 @@ Copy `.env.example` to `.env` at the project root. All fields are optional — d
 
 ## Output
 
-All exports are written to `electron-outlook/output/` with a timestamp (gitignored).
+All exports are written to `electron-outlook/output/` (gitignored).
 
 ```
-output/recipients_20250625_143022.csv
-output/emails_20250625_143022.csv
-output/emails_20250625_143022.json
-output/eml_export_20250625_143022/
+output/recipients_20250625_143022.csv    ← Recipients CSV (timestamped)
+output/emails_20250625_143022.csv        ← Emails CSV (timestamped)
+output/emails_20250625_143022.json       ← JSON (timestamped)
+output/eml_export_20250625_143022/       ← EML files (timestamped)
   └── Sent Items/
         └── 2025-06-25T14-30-22_<id>.eml
+output/emails.sqlite                     ← SQLite DB (persistent, not timestamped)
 ```
+
+> The SQLite database is **not** timestamped — it is reused across runs and records are
+> upserted by `message_id`, so re-running the export never creates duplicate rows.
+> An `exported_at` column records when each row was last written.
 
 ## Scripts
 

@@ -98,19 +98,26 @@ and renders it with item counts and expand/collapse controls.
 
 ### Step 3 — Choose export format
 
-| Format | Output |
-|---|---|
-| **Recipients CSV** | Unique sender/recipient addresses + display names |
-| **Emails CSV** | One row per message with your selected fields |
-| **EML Files** | One `.eml` file per message, organised by folder |
-| **JSON** | Structured array of message objects |
+| Format | Output | Notes |
+|---|---|---|
+| **Recipients CSV** | Unique sender/recipient addresses + display names | Timestamped file |
+| **Emails CSV** | One row per message with your selected fields | Timestamped file |
+| **EML Files** | One `.eml` file per message, organised by folder | Timestamped directory |
+| **JSON** | Structured array of message objects | Timestamped file |
+| **SQLite** | Persistent `output/emails.sqlite` database | **Not timestamped** — re-run safe (no duplicates) |
 
-### Step 4 — Select fields *(CSV / JSON / EML)*
+> **SQLite export is idempotent.** Records are upserted using `message_id` as the
+> primary key — re-running the export adds new messages and refreshes existing ones
+> without ever creating duplicates.  An `exported_at` column records when each row
+> was last written.
+
+### Step 4 — Select fields *(CSV / JSON / SQLite / EML)*
 Toggle which fields to include per message:
 **From · To/CC · Subject · Body (plain text) · Body (HTML) · Attachments metadata**
 
-> EML exports always include From, To/CC, Subject, and Body — field toggles apply to extra metadata only.
-> Field toggles are not shown for **Recipients CSV** (not applicable).
+> EML exports always include From, To/CC, Subject, and Body — field toggles apply to extra metadata only.  
+> Field toggles are not shown for **Recipients CSV** (not applicable).  
+> For **SQLite** the table always contains all columns; field toggles control which columns are populated.
 
 ### Step 5 — Domain filter
 The **"Exclude addresses containing"** field pre-fills from `EXCLUDED_DOMAIN` in `.env`.
@@ -132,6 +139,7 @@ This option works alongside **every** export format:
 | Emails CSV | CSV saved + attachment files downloaded |
 | EML Files | .eml files saved + attachment files downloaded |
 | JSON | JSON saved + attachment files downloaded |
+| SQLite | DB upserted + attachment files downloaded |
 
 When this toggle is checked, a **file-type picker** appears:
 
@@ -168,19 +176,20 @@ Click **"Open Output"** to open the result file or folder.
 
 ## 5. Output
 
-All exports go to `electron-outlook/output/` with a timestamp (gitignored):
+All exports go to `electron-outlook/output/` (gitignored):
 
 ```
 output/
-├── recipients_20250625_143022.csv          # Recipients CSV
-├── emails_20250625_143022.csv              # Emails CSV
-├── emails_20250625_143022.json             # JSON
-├── eml_export_20250625_143022/             # EML files
+├── recipients_20250625_143022.csv          # Recipients CSV  (timestamped)
+├── emails_20250625_143022.csv              # Emails CSV      (timestamped)
+├── emails_20250625_143022.json             # JSON            (timestamped)
+├── eml_export_20250625_143022/             # EML files       (timestamped)
 │   ├── Sent Items/
 │   │   └── 2025-06-25T14-30-22_<id>.eml
 │   └── Inbox/
 │       └── 2025-06-25T10-00-00_<id>.eml
-└── attachments_20250625_143022/            # Attachments export
+├── emails.sqlite                           # SQLite DB       (persistent, NOT timestamped)
+└── attachments_20250625_143022/            # Attachments export (timestamped)
     ├── Sent Items/
     │   ├── report.xlsx
     │   └── photo.jpg
@@ -190,6 +199,32 @@ output/
 
 > Duplicate filenames within the same mailbox folder are automatically deduplicated:
 > `report.xlsx`, `report_1.xlsx`, `report_2.xlsx`, …
+
+### SQLite database schema
+
+```sql
+CREATE TABLE emails (
+  message_id      TEXT PRIMARY KEY,   -- Graph message ID — upsert key
+  sent_datetime   TEXT,
+  folder          TEXT,
+  from_email      TEXT,
+  from_name       TEXT,
+  to_recipients   TEXT,
+  cc_recipients   TEXT,
+  subject         TEXT,
+  body_text       TEXT,
+  body_html       TEXT,
+  attachments     TEXT,               -- JSON string of attachment metadata
+  exported_at     TEXT                -- ISO-8601 timestamp of last upsert
+);
+```
+
+You can query the database with any SQLite client — for example:
+
+```bash
+sqlite3 electron-outlook/output/emails.sqlite \
+  "SELECT sent_datetime, from_email, subject FROM emails ORDER BY sent_datetime DESC LIMIT 20;"
+```
 
 ### Recipients CSV columns
 
@@ -242,6 +277,7 @@ Remove-Item "$env:USERPROFILE\.cache\extract_outlook_token_folder.json" -ErrorAc
 | App blocked by macOS Gatekeeper | Right-click Electron.app → Open → confirm in the dialog |
 | Script blocked by Windows SmartScreen | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` in an elevated PowerShell |
 | No output produced | Check the domain filter — it may be excluding all messages; try unchecking it |
+| SQLite DB not updated | Verify the `output/emails.sqlite` file exists and is not locked by another process |
 
 ---
 

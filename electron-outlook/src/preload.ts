@@ -9,7 +9,7 @@ interface MailFolder {
 }
 
 export interface ExportParams {
-  exportFormat: "recipients-csv" | "emails-csv" | "eml" | "json";
+  exportFormat: "recipients-csv" | "emails-csv" | "eml" | "json" | "sqlite";
   includeFrom:            boolean;
   includeToCC:            boolean;
   includeSubject:         boolean;

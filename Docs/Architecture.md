@@ -5,7 +5,7 @@
 The **Electron Folder Extractor** is a native desktop app that authenticates against
 Microsoft Identity Platform via OAuth 2.0 Authorization Code + PKCE, fetches your
 mailbox folder tree through the Microsoft Graph API, and exports selected emails in
-one of four formats — all without storing any password.
+one of five formats — all without storing any password.
 
 ```mermaid
 flowchart TD
@@ -27,6 +27,7 @@ flowchart TD
         CSV2["emails_TIMESTAMP.csv\nOne row per message"]
         JSON["emails_TIMESTAMP.json\nStructured array"]
         EML["eml_export_TIMESTAMP/\nOne .eml per message"]
+        SQLITE["emails.sqlite\nPersistent DB — idempotent upsert"]
         CACHE["~/.cache/extract_outlook_token_folder.json\nToken cache"]
     end
 
@@ -38,7 +39,7 @@ flowchart TD
     MAIN -->|GET /me/mailFolders recursive| GRAPH
     MAIN -->|GET mailFolders + messages paginated| GRAPH
     GRAPH -->|JSON| MAIN
-    MAIN --> CSV1 & CSV2 & JSON & EML
+    MAIN --> CSV1 & CSV2 & JSON & EML & SQLITE
     IDP --> CACHE
 ```
 
@@ -96,8 +97,9 @@ flowchart TD
     I --> J2["Emails CSV\noutput/emails_TIMESTAMP.csv"]
     I --> J3["JSON\noutput/emails_TIMESTAMP.json"]
     I --> J4["EML Files\noutput/eml_export_TIMESTAMP/FolderName/"]
-    J1 & J2 & J3 & J4 --> K([Open Output\nshell.openPath])
-    J1 & J2 & J3 & J4 -->|saveAttachments=true| ATT["Attachment files\noutput/attachments_TIMESTAMP/FolderName/\nfiltered by type"]
+    I --> J5["SQLite\noutput/emails.sqlite\nUPSERT ON CONFLICT message_id"]
+    J1 & J2 & J3 & J4 & J5 --> K([Open Output\nshell.openPath])
+    J1 & J2 & J3 & J4 & J5 -->|saveAttachments=true| ATT["Attachment files\noutput/attachments_TIMESTAMP/FolderName/\nfiltered by type"]
 ```
 
 ---
@@ -121,7 +123,7 @@ flowchart TD
 
 ```typescript
 interface ExportParams {
-  exportFormat:           "recipients-csv" | "emails-csv" | "eml" | "json";
+  exportFormat:           "recipients-csv" | "emails-csv" | "eml" | "json" | "sqlite";
   includeFrom:            boolean;
   includeToCC:            boolean;
   includeSubject:         boolean;
@@ -135,10 +137,50 @@ interface ExportParams {
   attachmentTypes:        string[]; // [] or ["all"] = all types; else subset of:
                                     //   "pdf" | "docx" | "pptx" | "xlsx" | "images"
   // note: field toggles are ignored for "recipients-csv" format
+  // note: field toggles are optional for "sqlite" (the table always has all columns)
 }
 ```
 
-### Attachment type → file extension mapping
+---
+
+## SQLite Export — Idempotency Design
+
+The SQLite export writes to a **single, persistent file** (`output/emails.sqlite`).
+Unlike the other formats it is **not timestamped**, so each run operates on the same
+database, enabling incremental syncs.
+
+Key design decisions:
+
+| Decision | Rationale |
+|---|---|
+| `message_id TEXT PRIMARY KEY` | Microsoft Graph message IDs are globally unique and stable |
+| `INSERT … ON CONFLICT(message_id) DO UPDATE SET …` | Upsert semantics — re-running never adds duplicates; existing rows are refreshed |
+| `exported_at TEXT` | ISO-8601 timestamp recording when each row was last written |
+| WAL journal mode | Safer for concurrent reads while the app is writing |
+| Per-folder batched transactions | Orders-of-magnitude faster than one transaction per row |
+
+### SQLite table schema
+
+```sql
+CREATE TABLE IF NOT EXISTS emails (
+  message_id      TEXT PRIMARY KEY,
+  sent_datetime   TEXT,
+  folder          TEXT,
+  from_email      TEXT,
+  from_name       TEXT,
+  to_recipients   TEXT,
+  cc_recipients   TEXT,
+  subject         TEXT,
+  body_text       TEXT,
+  body_html       TEXT,
+  attachments     TEXT,   -- JSON string of attachment metadata
+  exported_at     TEXT    -- ISO-8601 timestamp of last upsert
+);
+```
+
+---
+
+## Attachment type → file extension mapping
 
 | UI label | Matched extensions |
 |---|---|

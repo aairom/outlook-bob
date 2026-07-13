@@ -87,7 +87,7 @@
     /* ── Export format selector ── */
     .format-grid {
       display: grid;
-      grid-template-columns: repeat(4, 1fr);
+      grid-template-columns: repeat(5, 1fr);
       gap: 8px;
       margin-bottom: 18px;
     }
@@ -297,6 +297,11 @@
         <span class="fmt-name">JSON</span>
         <span class="fmt-desc">Structured array of message objects</span>
       </div>
+      <div class="format-btn" data-format="sqlite">
+        <span class="fmt-icon">🗄️</span>
+        <span class="fmt-name">SQLite</span>
+        <span class="fmt-desc">Persistent DB, re-run safe (no duplicates)</span>
+      </div>
     </div>
 
     <!-- Field toggles (hidden for recipients-csv) -->
@@ -459,6 +464,11 @@
       fieldSection.style.display   = isRecipients ? "none" : "block";
       emlHint.style.display        = isEml        ? "block" : "none";
       attTypeSection.style.display = chkSaveAttachments.checked ? "block" : "none";
+    }
+
+    // Validate non-recipients/eml/sqlite formats for at least one field
+    function requiresFieldSelection(fmt) {
+      return fmt !== "recipients-csv" && fmt !== "eml" && fmt !== "sqlite";
     }
     updateFieldVisibility();
 
@@ -710,8 +720,8 @@
 
       const exportParams = getExportParams();
 
-      // Validate: non-recipients formats need at least one field
-      if (exportParams.exportFormat !== "recipients-csv" && exportParams.exportFormat !== "eml") {
+      // Validate: some formats need at least one field selected
+      if (requiresFieldSelection(exportParams.exportFormat)) {
         const anyField = exportParams.includeFrom || exportParams.includeToCC ||
                          exportParams.includeSubject || exportParams.includeBodyText ||
                          exportParams.includeBodyHtml || exportParams.includeAttachmentsMeta;
@@ -754,6 +764,7 @@
           "emails-csv":     `${count} messages saved to CSV`,
           "eml":            `${count} .eml files exported`,
           "json":           `${count} messages saved to JSON`,
+          "sqlite":         `${count} records upserted into SQLite database`,
         };
         resultMsg.style.display = "block";
         resultMsg.className = "ok";

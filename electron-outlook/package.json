@@ -6,15 +6,19 @@
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "start": "npm run build && electron .",
-    "pack": "npm run build && electron-builder --mac"
+    "pack": "npm run build && electron-builder --mac",
+    "postinstall": "electron-rebuild -f -w better-sqlite3"
   },
   "keywords": [],
   "author": "Bob",
   "license": "MIT",
   "dependencies": {
+    "better-sqlite3": "^12.11.1",
     "dotenv": "^16.4.5"
   },
   "devDependencies": {
+    "@electron/rebuild": "^4.2.0",
+    "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.30",
     "electron": "^42.5.0",
     "electron-builder": "^26.0.12",
@@ -38,5 +42,8 @@
         "to": "renderer"
       }
     ]
+  },
+  "allowScripts": {
+    "better-sqlite3@12.11.1": true
   }
 }

@@ -6,6 +6,7 @@ import * as https from "https";
 import * as crypto from "crypto";
 import { URL, URLSearchParams } from "url";
 import * as dotenv from "dotenv";
+import Database from "better-sqlite3";
 
 // ── Load shared .env from project root ────────────────────────────────────────
 const _envCandidates = [
@@ -54,8 +55,8 @@ interface Recipient {
 }
 
 export interface ExportParams {
-  /** "recipients-csv" | "emails-csv" | "eml" | "json" */
-  exportFormat: "recipients-csv" | "emails-csv" | "eml" | "json";
+  /** "recipients-csv" | "emails-csv" | "eml" | "json" | "sqlite" */
+  exportFormat: "recipients-csv" | "emails-csv" | "eml" | "json" | "sqlite";
   includeFrom:            boolean;
   includeToCC:            boolean;
   includeSubject:         boolean;
@@ -757,6 +758,143 @@ async function runEmlExport(
   return { filePath: exportDir, count };
 }
 
+// ── FORMAT: SQLite (idempotent – keyed on messageId) ─────────────────────────
+/**
+ * Opens (or creates) a persistent SQLite database in the output directory.
+ * The database file is NOT timestamped so that re-running the export upserts
+ * records instead of creating duplicates.  A `exported_at` column records
+ * when each row was last written.
+ *
+ * Schema (emails table):
+ *   message_id TEXT PRIMARY KEY
+ *   sent_datetime TEXT
+ *   folder TEXT
+ *   from_email TEXT
+ *   from_name TEXT
+ *   to_recipients TEXT
+ *   cc_recipients TEXT
+ *   subject TEXT
+ *   body_text TEXT
+ *   body_html TEXT
+ *   attachments TEXT   (JSON)
+ *   exported_at TEXT   (ISO timestamp of last upsert)
+ */
+async function runSqliteExport(
+  token: string, folders: MailFolder[], since: string | undefined,
+  params: ExportParams, onProgress: (msg: string) => void
+): Promise<{ filePath: string; count: number }> {
+  const dbPath   = path.join(getOutputDir(), "emails.sqlite");
+  const db       = new Database(dbPath);
+
+  // Enable WAL for better concurrent access
+  db.pragma("journal_mode = WAL");
+
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS emails (
+      message_id      TEXT PRIMARY KEY,
+      sent_datetime   TEXT,
+      folder          TEXT,
+      from_email      TEXT,
+      from_name       TEXT,
+      to_recipients   TEXT,
+      cc_recipients   TEXT,
+      subject         TEXT,
+      body_text       TEXT,
+      body_html       TEXT,
+      attachments     TEXT,
+      exported_at     TEXT
+    );
+  `);
+
+  const upsert = db.prepare(`
+    INSERT INTO emails
+      (message_id, sent_datetime, folder, from_email, from_name,
+       to_recipients, cc_recipients, subject, body_text, body_html,
+       attachments, exported_at)
+    VALUES
+      (@message_id, @sent_datetime, @folder, @from_email, @from_name,
+       @to_recipients, @cc_recipients, @subject, @body_text, @body_html,
+       @attachments, @exported_at)
+    ON CONFLICT(message_id) DO UPDATE SET
+      sent_datetime   = excluded.sent_datetime,
+      folder          = excluded.folder,
+      from_email      = excluded.from_email,
+      from_name       = excluded.from_name,
+      to_recipients   = excluded.to_recipients,
+      cc_recipients   = excluded.cc_recipients,
+      subject         = excluded.subject,
+      body_text       = excluded.body_text,
+      body_html       = excluded.body_html,
+      attachments     = excluded.attachments,
+      exported_at     = excluded.exported_at
+  `);
+
+  const selectFields = buildSelectFields(params);
+  let total = 0; let upserted = 0;
+  const exportedAt = new Date().toISOString();
+
+  // Wrap all inserts in a single transaction for performance
+  const insertAll = db.transaction((rows: object[]) => {
+    for (const row of rows) upsert.run(row);
+  });
+
+  onProgress(`Scanning ${folders.length} folder(s) — SQLite export → ${dbPath}`);
+
+  for (const folder of folders) {
+    onProgress(`📁 ${folder.displayName}…`);
+    const batch: object[] = [];
+
+    for await (const msg of iterFolderMessages(token, folder.id, since, selectFields)) {
+      total++;
+      if (total % 50 === 0) onProgress(`Fetched ${total} messages…`);
+
+      if (params.flaggedOnly) {
+        const flagStatus = ((msg["flag"] as Record<string,string>|undefined)?.["flagStatus"]) ?? "";
+        if (flagStatus !== "flagged") continue;
+      }
+
+      const fromEa = ((msg["from"] as Record<string,unknown>|undefined)?.["emailAddress"] as Record<string,string>|undefined) ?? {};
+      const { name: fromName, email: fromEmail } = extractAddress(fromEa);
+      if (params.filterExcludedDomain && fromEmail && isExcluded(fromEmail, params.excludedDomain)) continue;
+
+      const bodyObj     = msg["body"] as Record<string,string> | undefined;
+      const isHtml      = bodyObj?.["contentType"] === "html";
+      const bodyContent = bodyObj?.["content"] ?? "";
+
+      let attachmentsStr = "";
+      if (params.includeAttachmentsMeta && msg["hasAttachments"])
+        attachmentsStr = JSON.stringify(await fetchAttachmentsMeta(token, msg["id"] as string));
+
+      batch.push({
+        message_id:     String(msg["id"] ?? ""),
+        sent_datetime:  String(msg["sentDateTime"] ?? ""),
+        folder:         folder.displayName,
+        from_email:     params.includeFrom    ? fromEmail  : "",
+        from_name:      params.includeFrom    ? fromName   : "",
+        to_recipients:  params.includeToCC    ? recipientListStr((msg["toRecipients"] as Array<Record<string,unknown>>|undefined) ?? []) : "",
+        cc_recipients:  params.includeToCC    ? recipientListStr((msg["ccRecipients"] as Array<Record<string,unknown>>|undefined) ?? []) : "",
+        subject:        params.includeSubject ? String(msg["subject"] ?? "") : "",
+        body_text:      params.includeBodyText && !isHtml ? bodyContent : "",
+        body_html:      params.includeBodyHtml && isHtml  ? bodyContent : "",
+        attachments:    attachmentsStr,
+        exported_at:    exportedAt,
+      });
+      upserted++;
+    }
+
+    // Commit this folder's batch
+    insertAll(batch);
+  }
+
+  db.close();
+
+  onProgress(`Done: ${upserted} records upserted into ${dbPath} (${total} scanned).`);
+  if (upserted === 0) return { filePath: "", count: 0 };
+
+  await maybeSaveAttachments(token, folders, since, params, onProgress);
+  return { filePath: dbPath, count: upserted };
+}
+
 // ── Electron window ───────────────────────────────────────────────────────────
 let mainWindow: BrowserWindow | null = null;
 
@@ -836,6 +974,7 @@ ipcMain.handle("start-extraction", async (
       case "emails-csv": result = await runEmailsCsvExport(token, selected, since, exportParams, onProgress); break;
       case "json":       result = await runJsonExport(token, selected, since, exportParams, onProgress); break;
       case "eml":        result = await runEmlExport(token, selected, since, exportParams, onProgress); break;
+      case "sqlite":     result = await runSqliteExport(token, selected, since, exportParams, onProgress); break;
       default:           result = await runRecipientsExport(token, selected, since, exportParams, onProgress);
     }
 
