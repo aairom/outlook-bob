@@ -23,6 +23,8 @@ export interface ExportParams {
   saveAttachments:        boolean;
   /** File-type filter for attachment saving. Empty array = save all types. */
   attachmentTypes:        string[];
+  /** When true, the primary export output (file or folder) is compressed into a .zip archive. */
+  zipOutput:              boolean;
 }
 
 contextBridge.exposeInMainWorld("electronAPI", {

@@ -401,6 +401,14 @@
     <label class="field-label" for="since-date">Scan emails since (optional)</label>
     <input type="date" id="since-date" />
 
+    <!-- ZIP toggle lives here so it is always visible before the Run button -->
+    <div class="filter-row" style="margin-top:14px; padding-top:14px; border-top:1px solid #45475a;">
+      <input type="checkbox" id="chk-zip-output" />
+      <label for="chk-zip-output" style="-webkit-app-region:no-drag; cursor:pointer;">
+        📦 Compress output as ZIP file
+      </label>
+    </div>
+
     <div class="btn-row">
       <button id="btn-extract" disabled>Run Extraction</button>
       <button id="btn-open-output">Open Output</button>
@@ -547,6 +555,7 @@
         flaggedOnly:            document.getElementById("chk-flagged-only").checked,
         saveAttachments:        chkSaveAttachments.checked,
         attachmentTypes:        getAttachmentTypes(),
+        zipOutput:              document.getElementById("chk-zip-output").checked,
       };
     }
 
@@ -759,6 +768,7 @@
         lastOutputPath = outputPath;
         btnOpenOutput.style.display = "inline-block";
 
+        const zipped = outputPath.endsWith(".zip");
         const labels = {
           "recipients-csv": `${count} unique recipients saved to CSV`,
           "emails-csv":     `${count} messages saved to CSV`,
@@ -766,9 +776,10 @@
           "json":           `${count} messages saved to JSON`,
           "sqlite":         `${count} records upserted into SQLite database`,
         };
+        const base = labels[format] || `${count} items exported`;
         resultMsg.style.display = "block";
         resultMsg.className = "ok";
-        resultMsg.textContent = "✅ Done — " + (labels[format] || `${count} items exported`);
+        resultMsg.textContent = "✅ Done — " + base + (zipped ? " (ZIP)" : "");
         appendLog("Saved → " + outputPath, "ok");
       });
 
@@ -795,8 +806,64 @@
       if (lastOutputPath) api.openFile(lastOutputPath);
     });
 
+    // ── Reset all UI controls to their defined defaults ───────────────────────
+    function resetUI() {
+      // Format selector → Recipients CSV
+      document.querySelectorAll(".format-btn").forEach(b => b.classList.remove("active"));
+      document.querySelector(".format-btn[data-format='recipients-csv']").classList.add("active");
+      selectedFormat = "recipients-csv";
+
+      // Field chips → From, To/CC, Subject on; rest off
+      const chipDefaults = { "chk-from": true, "chk-tocc": true, "chk-subject": true,
+                              "chk-bodytext": false, "chk-bodyhtml": false, "chk-attachments": false };
+      for (const [id, state] of Object.entries(chipDefaults)) {
+        const cb   = document.getElementById(id);
+        const chip = cb.closest(".toggle-chip");
+        cb.checked = state;
+        chip.classList.toggle("on", state);
+      }
+
+      // Domain filter → checked, value = .ibm.com, input enabled
+      chkFilterDomain.checked         = true;
+      excludedDomainInput.value       = ".ibm.com";
+      excludedDomainInput.disabled    = false;
+
+      // All other checkboxes → unchecked
+      document.getElementById("chk-flagged-only").checked    = false;
+      document.getElementById("chk-save-attachments").checked = false;
+      document.getElementById("chk-zip-output").checked      = false;
+
+      // Attachment type chips → All types on, specific chips off
+      attAllChk.checked = true;
+      attAllChip.classList.add("on");
+      attSpecific.forEach(t => {
+        document.getElementById("chk-att-" + t).checked = false;
+        document.getElementById("chip-att-" + t).classList.remove("on");
+      });
+
+      // Date filter → cleared
+      sinceDate.value = "";
+
+      // Folder tree → hidden, deselected
+      folderCard.style.display = "none";
+      folderTree.innerHTML     = "";
+      cachedFolderTree         = [];
+      updateSelectedCount();
+
+      // Log / result → hidden
+      logCard.style.display        = "none";
+      logEl.innerHTML              = "";
+      resultMsg.style.display      = "none";
+      resultMsg.className          = "";
+      btnOpenOutput.style.display  = "none";
+      lastOutputPath               = "";
+
+      updateFieldVisibility();
+    }
+
     // ── Boot ──────────────────────────────────────────────────────────────────
     (async () => {
+      resetUI();
       const { authenticated } = await api.getStatus();
       setAuthenticated(authenticated);
     })();

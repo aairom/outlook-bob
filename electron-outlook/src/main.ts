@@ -7,6 +7,7 @@ import * as crypto from "crypto";
 import { URL, URLSearchParams } from "url";
 import * as dotenv from "dotenv";
 import Database from "better-sqlite3";
+import { ZipArchive } from "archiver";
 
 // ── Load shared .env from project root ────────────────────────────────────────
 const _envCandidates = [
@@ -76,6 +77,8 @@ export interface ExportParams {
    * Otherwise contains one or more of: "pdf","docx","pptx","xlsx","images"
    */
   attachmentTypes:        string[];
+  /** When true, the primary export output (file or folder) is compressed into a .zip archive. */
+  zipOutput:              boolean;
 }
 
 // ── Attachment-type filter helpers ────────────────────────────────────────────
@@ -468,6 +471,40 @@ function getOutputDir(): string {
 
 function timestamp(): string {
   return new Date().toISOString().replace(/[-:T]/g, "").substring(0, 15);
+}
+
+// ── ZIP helper ────────────────────────────────────────────────────────────────
+/**
+ * Compresses `sourcePath` (file or directory) into a timestamped .zip archive
+ * placed next to it in the output directory.  Returns the zip file path.
+ * The original file/directory is removed after successful compression.
+ */
+function wrapWithZip(sourcePath: string, onProgress: (msg: string) => void): Promise<string> {
+  return new Promise((resolve, reject) => {
+    const isDir  = fs.statSync(sourcePath).isDirectory();
+    const base   = path.basename(sourcePath, path.extname(sourcePath));
+    const zipPath = path.join(path.dirname(sourcePath), `${base}_${timestamp()}.zip`);
+
+    onProgress(`📦 Compressing output → ${path.basename(zipPath)}…`);
+
+    const output  = fs.createWriteStream(zipPath);
+    const archive = new ZipArchive({ zlib: { level: 9 } });
+
+    output.on("close", () => {
+      // Remove the original file / directory after successful zip
+      if (isDir) fs.rmSync(sourcePath, { recursive: true, force: true });
+      else       fs.unlinkSync(sourcePath);
+      onProgress(`📦 ZIP ready: ${zipPath} (${(archive.pointer() / 1024).toFixed(1)} KB)`);
+      resolve(zipPath);
+    });
+    archive.on("error", reject);
+    archive.pipe(output);
+
+    if (isDir) archive.directory(sourcePath, false);
+    else       archive.file(sourcePath, { name: path.basename(sourcePath) });
+
+    archive.finalize();
+  });
 }
 
 // ── FORMAT: recipients-csv (original behaviour) ───────────────────────────────
@@ -988,7 +1025,12 @@ ipcMain.handle("start-extraction", async (
     if (result.count === 0) {
       send("done", { outputPath: "", count: 0, format: exportParams.exportFormat });
     } else {
-      send("done", { outputPath: result.filePath, count: result.count, format: exportParams.exportFormat });
+      // Optionally compress the output file/folder into a ZIP archive
+      let finalPath = result.filePath;
+      if (exportParams.zipOutput && finalPath) {
+        finalPath = await wrapWithZip(finalPath, onProgress);
+      }
+      send("done", { outputPath: finalPath, count: result.count, format: exportParams.exportFormat });
     }
   } catch (err) {
     send("error", { message: err instanceof Error ? err.message : String(err) });

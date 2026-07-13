@@ -13,11 +13,13 @@
   "author": "Bob",
   "license": "MIT",
   "dependencies": {
+    "archiver": "^8.0.0",
     "better-sqlite3": "^12.11.1",
     "dotenv": "^16.4.5"
   },
   "devDependencies": {
     "@electron/rebuild": "^4.2.0",
+    "@types/archiver": "^8.0.0",
     "@types/better-sqlite3": "^7.6.13",
     "@types/node": "^22.15.30",
     "electron": "^42.5.0",

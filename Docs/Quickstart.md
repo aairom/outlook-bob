@@ -4,6 +4,9 @@ A native Electron desktop app that connects to your **Microsoft 365 mailbox** vi
 Microsoft Graph API (OAuth 2.0 PKCE — no password stored), lets you pick any folders
 interactively, and exports emails in your preferred format.
 
+> **Fresh start on every launch** — all options (format, fields, filters, date, ZIP)
+> are reset to their defaults when the app opens. Nothing is remembered between sessions.
+
 ---
 
 ## 1. Prerequisites
@@ -106,18 +109,19 @@ and renders it with item counts and expand/collapse controls.
 | **JSON** | Structured array of message objects | Timestamped file |
 | **SQLite** | Persistent `output/emails.sqlite` database | **Not timestamped** — re-run safe (no duplicates) |
 
-> **SQLite export is idempotent.** Records are upserted using `message_id` as the
-> primary key — re-running the export adds new messages and refreshes existing ones
-> without ever creating duplicates.  An `exported_at` column records when each row
-> was last written.
+> **SQLite is idempotent.** Records are upserted on `message_id` — re-running adds
+> new messages and refreshes existing ones without ever creating duplicates.
+> An `exported_at` column records when each row was last written.
 
 ### Step 4 — Select fields *(CSV / JSON / SQLite / EML)*
 Toggle which fields to include per message:
 **From · To/CC · Subject · Body (plain text) · Body (HTML) · Attachments metadata**
 
+> **Body (plain text)** strips HTML tags automatically — Microsoft Graph always returns
+> HTML, so both body toggles always produce content when enabled.  
 > EML exports always include From, To/CC, Subject, and Body — field toggles apply to extra metadata only.  
-> Field toggles are not shown for **Recipients CSV** (not applicable).  
-> For **SQLite** the table always contains all columns; field toggles control which columns are populated.
+> Field toggles are hidden for **Recipients CSV** (not applicable).  
+> For **SQLite** the table always has all columns; toggles control which are populated.
 
 ### Step 5 — Domain filter
 The **"Exclude addresses containing"** field pre-fills from `EXCLUDED_DOMAIN` in `.env`.
@@ -159,7 +163,22 @@ When this toggle is checked, a **file-type picker** appears:
 ### Step 8 — (Optional) Date filter
 Enter a **"Scan emails since"** date to limit the scan to messages on or after that date.
 
-### Step 9 — Run
+### Step 9 — (Optional) Compress output as ZIP
+Check **"📦 Compress output as ZIP file"** (located in the run card, just above the
+Run button) to automatically compress the primary export into a `.zip` archive after
+extraction completes.
+
+| Behaviour | Detail |
+|---|---|
+| Output name | `<original-basename>_<timestamp>.zip` |
+| Original removed | Yes — the source file or directory is deleted after the ZIP is created |
+| Works with | All five export formats |
+| Attachments folder | The attachments directory is **not** zipped — only the primary export |
+
+> **SQLite + ZIP:** the `.sqlite` file is zipped and then removed. The next non-ZIP
+> SQLite run recreates the database file and upserts all matching records again.
+
+### Step 10 — Run
 Click **"Run Extraction"**. The progress log shows live updates:
 
 ```
@@ -167,7 +186,9 @@ Click **"Run Extraction"**. The progress log shows live updates:
 Fetched 50 messages…
 Fetched 100 messages…
 Done: 247 messages exported.
-✅ Done — 247 messages saved to CSV.
+📦 Compressing output → emails_20250625_143022.zip…
+📦 ZIP ready: …/emails_20250625_143022.zip (312.4 KB)
+✅ Done — 247 messages saved to JSON (ZIP)
 ```
 
 Click **"Open Output"** to open the result file or folder.
@@ -183,13 +204,14 @@ output/
 ├── recipients_20250625_143022.csv          # Recipients CSV  (timestamped)
 ├── emails_20250625_143022.csv              # Emails CSV      (timestamped)
 ├── emails_20250625_143022.json             # JSON            (timestamped)
-├── eml_export_20250625_143022/             # EML files       (timestamped)
+├── eml_export_20250625_143022/             # EML files       (timestamped directory)
 │   ├── Sent Items/
 │   │   └── 2025-06-25T14-30-22_<id>.eml
 │   └── Inbox/
 │       └── 2025-06-25T10-00-00_<id>.eml
 ├── emails.sqlite                           # SQLite DB       (persistent, NOT timestamped)
-└── attachments_20250625_143022/            # Attachments export (timestamped)
+├── emails_20250625_143022.zip              # ZIP of any export (when ZIP option checked)
+└── attachments_20250625_143022/            # Attachment files (timestamped, never zipped)
     ├── Sent Items/
     │   ├── report.xlsx
     │   └── photo.jpg
@@ -212,15 +234,14 @@ CREATE TABLE emails (
   to_recipients   TEXT,
   cc_recipients   TEXT,
   subject         TEXT,
-  body_text       TEXT,
-  body_html       TEXT,
+  body_text       TEXT,               -- HTML tags stripped automatically
+  body_html       TEXT,               -- raw HTML content
   attachments     TEXT,               -- JSON string of attachment metadata
   exported_at     TEXT                -- ISO-8601 timestamp of last upsert
 );
 ```
 
-You can query the database with any SQLite client — for example:
-
+Query example:
 ```bash
 sqlite3 electron-outlook/output/emails.sqlite \
   "SELECT sent_datetime, from_email, subject FROM emails ORDER BY sent_datetime DESC LIMIT 20;"
@@ -274,10 +295,12 @@ Remove-Item "$env:USERPROFILE\.cache\extract_outlook_token_folder.json" -ErrorAc
 | Port 8765 already in use | Change `REDIRECT_URI=http://localhost:XXXX` in `.env` and update your Azure App Registration |
 | `HTTP 401` | Delete the token cache (§ 7 above) and reconnect |
 | `HTTP 403` | Admin consent for `Mail.Read` may be required in your organisation's tenant |
+| Body text column is empty | Ensure "Body (plain text)" is ticked — the toggle was off |
 | App blocked by macOS Gatekeeper | Right-click Electron.app → Open → confirm in the dialog |
 | Script blocked by Windows SmartScreen | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` in an elevated PowerShell |
 | No output produced | Check the domain filter — it may be excluding all messages; try unchecking it |
-| SQLite DB not updated | Verify the `output/emails.sqlite` file exists and is not locked by another process |
+| SQLite DB not updated | Verify `output/emails.sqlite` is not locked by another process |
+| ZIP file not created | Check the progress log for compression errors; ensure disk space is available |
 
 ---
 

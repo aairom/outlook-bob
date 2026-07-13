@@ -7,14 +7,18 @@ Microsoft Identity Platform via OAuth 2.0 Authorization Code + PKCE, fetches you
 mailbox folder tree through the Microsoft Graph API, and exports selected emails in
 one of five formats — all without storing any password.
 
+All UI state (format selection, field toggles, filters, date, ZIP option) is reset
+to defined defaults on every app launch via an explicit `resetUI()` call in the boot
+sequence — no state is persisted between sessions.
+
 ```mermaid
 flowchart TD
     ENV[".env (project root)\nCLIENT_ID · EXCLUDED_DOMAIN\nREDIRECT_URI · LOGIN_HINT"]
 
     subgraph App["electron-outlook — Electron Desktop App"]
-        MAIN["main.ts\nMain process\nAuth · Graph API · Export logic"]
+        MAIN["main.ts\nMain process\nAuth · Graph API · Export logic · ZIP"]
         PRE["preload.ts\nContext bridge\nIPC channel definitions"]
-        UI["renderer/index.html\nRenderer process\nFolder tree · Export options UI"]
+        UI["renderer/index.html\nRenderer process\nFolder tree · Export options UI\nresetUI() on every boot"]
     end
 
     subgraph Microsoft["Microsoft Cloud"]
@@ -23,11 +27,12 @@ flowchart TD
     end
 
     subgraph Output["Output  (electron-outlook/output/ — gitignored)"]
-        CSV1["recipients_TIMESTAMP.csv\nUnique addresses + names"]
-        CSV2["emails_TIMESTAMP.csv\nOne row per message"]
-        JSON["emails_TIMESTAMP.json\nStructured array"]
-        EML["eml_export_TIMESTAMP/\nOne .eml per message"]
-        SQLITE["emails.sqlite\nPersistent DB — idempotent upsert"]
+        CSV1["recipients_TIMESTAMP.csv"]
+        CSV2["emails_TIMESTAMP.csv"]
+        JSON["emails_TIMESTAMP.json"]
+        EML["eml_export_TIMESTAMP/"]
+        SQLITE["emails.sqlite\nPersistent — idempotent upsert"]
+        ZIP["name_TIMESTAMP.zip\nOptional — original removed"]
         CACHE["~/.cache/extract_outlook_token_folder.json\nToken cache"]
     end
 
@@ -40,6 +45,7 @@ flowchart TD
     MAIN -->|GET mailFolders + messages paginated| GRAPH
     GRAPH -->|JSON| MAIN
     MAIN --> CSV1 & CSV2 & JSON & EML & SQLITE
+    CSV1 & CSV2 & JSON & EML & SQLITE -->|zipOutput=true| ZIP
     IDP --> CACHE
 ```
 
@@ -75,6 +81,7 @@ sequenceDiagram
     Main->>Graph: GET /me/mailFolders/[id]/messages paginated
     Graph-->>Main: Paginated message JSON
     Main->>Main: Filter · transform · write output
+    Main->>Main: wrapWithZip() if zipOutput=true
     Main-->>UI: IPC "done" (outputPath, count, format)
 ```
 
@@ -84,22 +91,25 @@ sequenceDiagram
 
 ```mermaid
 flowchart TD
-    A([Launch app\nnpm start]) --> B{Token cached\n& valid?}
+    A([Launch app\nnpm start]) --> RESET[resetUI — all options cleared to defaults]
+    RESET --> B{Token cached\n& valid?}
     B -- No --> C[Connect to Microsoft\nOAuth PKCE browser flow]
     C --> D[Token saved to disk]
     B -- Yes --> D
     D --> E[Load Folders\nGET /me/mailFolders recursive]
     E --> F[Folder tree rendered\ncheckboxes + item counts]
-    F --> G[User picks folders\n+ export format\n+ field toggles\n+ domain filter\n+ flagged filter\n+ save attachments toggle]
-    G --> H[Run Extraction\nGET messages per folder, paginated\n$select only requested fields]
+    F --> G[User picks folders\n+ export format + field toggles\n+ domain filter + flagged filter\n+ save attachments toggle + ZIP toggle]
+    G --> H[Run Extraction\nGET messages per folder, paginated\n$select only requested fields\nbody plain text = HTML stripped]
     H --> I{Export format}
     I --> J1["Recipients CSV\noutput/recipients_TIMESTAMP.csv"]
     I --> J2["Emails CSV\noutput/emails_TIMESTAMP.csv"]
     I --> J3["JSON\noutput/emails_TIMESTAMP.json"]
     I --> J4["EML Files\noutput/eml_export_TIMESTAMP/FolderName/"]
     I --> J5["SQLite\noutput/emails.sqlite\nUPSERT ON CONFLICT message_id"]
-    J1 & J2 & J3 & J4 & J5 --> K([Open Output\nshell.openPath])
-    J1 & J2 & J3 & J4 & J5 -->|saveAttachments=true| ATT["Attachment files\noutput/attachments_TIMESTAMP/FolderName/\nfiltered by type"]
+    J1 & J2 & J3 & J4 & J5 -->|saveAttachments=true| ATT["Attachment files\noutput/attachments_TIMESTAMP/FolderName/"]
+    J1 & J2 & J3 & J4 & J5 -->|zipOutput=true| ZIP["ZIP archive\noutput/name_TIMESTAMP.zip\noriginal file/dir removed"]
+    ZIP --> K([Open Output\nshell.openPath])
+    J1 & J2 & J3 & J4 & J5 --> K
 ```
 
 ---
@@ -127,37 +137,48 @@ interface ExportParams {
   includeFrom:            boolean;
   includeToCC:            boolean;
   includeSubject:         boolean;
-  includeBodyText:        boolean;
-  includeBodyHtml:        boolean;
+  includeBodyText:        boolean;   // strips HTML tags automatically when body is HTML
+  includeBodyHtml:        boolean;   // raw HTML content
   includeAttachmentsMeta: boolean;
   filterExcludedDomain:   boolean;
-  excludedDomain:         string;   // e.g. ".ibm.com" — editable in the UI
-  flaggedOnly:            boolean;  // when true, skip messages whose flag.flagStatus ≠ "flagged"
-  saveAttachments:        boolean;  // when true, binary attachment files are also saved to disk
-  attachmentTypes:        string[]; // [] or ["all"] = all types; else subset of:
-                                    //   "pdf" | "docx" | "pptx" | "xlsx" | "images"
-  // note: field toggles are ignored for "recipients-csv" format
-  // note: field toggles are optional for "sqlite" (the table always has all columns)
+  excludedDomain:         string;    // e.g. ".ibm.com" — editable in the UI
+  flaggedOnly:            boolean;   // skip messages whose flag.flagStatus ≠ "flagged"
+  saveAttachments:        boolean;   // save binary attachment files alongside primary export
+  attachmentTypes:        string[];  // [] = all; else subset of "pdf"|"docx"|"pptx"|"xlsx"|"images"
+  zipOutput:              boolean;   // compress primary export into .zip; original removed
 }
 ```
+
+> **Body text:** Microsoft Graph always returns HTML. `includeBodyText` automatically
+> strips HTML tags to produce readable plain text — both `bodyText` and `bodyHtml`
+> always contain content when their respective toggle is on.
+
+---
+
+## ZIP Export — Design
+
+`wrapWithZip(sourcePath, onProgress)` is called in the `start-extraction` handler after
+any format produces a non-empty result, when `exportParams.zipOutput === true`.
+
+| Detail | Value |
+|---|---|
+| Library | `archiver` v8 (`ZipArchive` class — pure JS, no native rebuild) |
+| Compression level | zlib level 9 |
+| Output naming | `<original-basename>_<timestamp>.zip` (timestamped, no overwrites) |
+| Files vs directories | `archive.file()` for single files; `archive.directory()` for EML directory trees |
+| Cleanup | Original file/directory removed after the `close` event fires |
 
 ---
 
 ## SQLite Export — Idempotency Design
 
-The SQLite export writes to a **single, persistent file** (`output/emails.sqlite`).
-Unlike the other formats it is **not timestamped**, so each run operates on the same
-database, enabling incremental syncs.
-
-Key design decisions:
-
 | Decision | Rationale |
 |---|---|
-| `message_id TEXT PRIMARY KEY` | Microsoft Graph message IDs are globally unique and stable |
-| `INSERT … ON CONFLICT(message_id) DO UPDATE SET …` | Upsert semantics — re-running never adds duplicates; existing rows are refreshed |
-| `exported_at TEXT` | ISO-8601 timestamp recording when each row was last written |
-| WAL journal mode | Safer for concurrent reads while the app is writing |
-| Per-folder batched transactions | Orders-of-magnitude faster than one transaction per row |
+| `message_id TEXT PRIMARY KEY` | Graph message IDs are globally unique and stable |
+| `INSERT … ON CONFLICT DO UPDATE` | Upsert — re-running never adds duplicates |
+| `exported_at TEXT` | ISO-8601 timestamp of last upsert |
+| WAL journal mode | Safe for concurrent reads while writing |
+| Per-folder batched transactions | Orders of magnitude faster than one transaction per row |
 
 ### SQLite table schema
 
@@ -197,10 +218,10 @@ CREATE TABLE IF NOT EXISTS emails (
 
 When `saveAttachments = true`, the main process makes two Graph calls per message that has attachments:
 
-1. **`GET /me/messages/{id}/attachments?$select=id,name,contentType,@microsoft.graph.downloadUrl`**
+1. **`GET /me/messages/{id}/attachments?$select=id,name,contentType,@microsoft.graph.downloadUrl`**  
    Returns the attachment list. `fileAttachment` items include `contentBytes` (base64) inline.
 
-2. **`GET /me/messages/{id}/attachments/{attId}/$value`**
+2. **`GET /me/messages/{id}/attachments/{attId}/$value`**  
    Used as a fallback when `contentBytes` is absent (large files, `itemAttachment` sub-items).
 
 Files are written to `output/attachments_TIMESTAMP/<FolderName>/<filename>`.
@@ -226,10 +247,10 @@ Outlook-Bob/
 │   └── stop-electron-outlook.ps1         # Stop gracefully (Windows)
 └── electron-outlook/
     ├── src/
-    │   ├── main.ts                        # Main process — auth, Graph API, all export logic
+    │   ├── main.ts                        # Main process — auth, Graph API, export logic, ZIP
     │   ├── preload.ts                     # Context bridge — IPC channel definitions + types
     │   └── renderer/
-    │       └── index.html                 # Full UI — folder tree, export options, progress log
+    │       └── index.html                 # Full UI — folder tree, export options, resetUI()
     ├── package.json
     ├── tsconfig.json
     ├── Quickstart.md                      # App-specific quickstart
