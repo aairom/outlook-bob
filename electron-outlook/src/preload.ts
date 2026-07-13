@@ -9,7 +9,7 @@ interface MailFolder {
 }
 
 export interface ExportParams {
-  exportFormat: "recipients-csv" | "emails-csv" | "eml" | "json" | "attachments";
+  exportFormat: "recipients-csv" | "emails-csv" | "eml" | "json";
   includeFrom:            boolean;
   includeToCC:            boolean;
   includeSubject:         boolean;
@@ -19,7 +19,9 @@ export interface ExportParams {
   filterExcludedDomain:   boolean;
   excludedDomain:         string;
   flaggedOnly:            boolean;
-  /** File-type filter for "attachments" format. Empty array = save all types. */
+  /** When true, attachment files are saved to disk alongside the primary export. */
+  saveAttachments:        boolean;
+  /** File-type filter for attachment saving. Empty array = save all types. */
   attachmentTypes:        string[];
 }
 

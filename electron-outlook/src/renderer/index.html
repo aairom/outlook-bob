@@ -87,7 +87,7 @@
     /* ── Export format selector ── */
     .format-grid {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(4, 1fr);
       gap: 8px;
       margin-bottom: 18px;
     }
@@ -297,11 +297,6 @@
         <span class="fmt-name">JSON</span>
         <span class="fmt-desc">Structured array of message objects</span>
       </div>
-      <div class="format-btn" data-format="attachments">
-        <span class="fmt-icon">📎</span>
-        <span class="fmt-name">Attachments</span>
-        <span class="fmt-desc">Save attached files by mailbox folder</span>
-      </div>
     </div>
 
     <!-- Field toggles (hidden for recipients-csv) -->
@@ -356,7 +351,15 @@
       </label>
     </div>
 
-    <!-- Attachment type filter (shown only for "attachments" format) -->
+    <!-- Save attachments toggle -->
+    <div class="filter-row">
+      <input type="checkbox" id="chk-save-attachments" />
+      <label for="chk-save-attachments" style="-webkit-app-region:no-drag; cursor:pointer;">
+        📎 Also save attachment files to disk
+      </label>
+    </div>
+
+    <!-- Attachment type filter (shown when save-attachments is checked) -->
     <div id="att-type-section" style="display:none;">
       <p class="section-title" style="margin-top:14px; margin-bottom:0;">Attachment file types</p>
       <div class="att-type-grid">
@@ -447,17 +450,19 @@
       });
     });
 
-    const attTypeSection = document.getElementById("att-type-section");
+    const attTypeSection    = document.getElementById("att-type-section");
+    const chkSaveAttachments = document.getElementById("chk-save-attachments");
 
     function updateFieldVisibility() {
-      const isRecipients  = selectedFormat === "recipients-csv";
-      const isEml         = selectedFormat === "eml";
-      const isAttachments = selectedFormat === "attachments";
-      fieldSection.style.display    = (isRecipients || isAttachments) ? "none" : "block";
-      emlHint.style.display         = isEml         ? "block" : "none";
-      attTypeSection.style.display  = isAttachments ? "block" : "none";
+      const isRecipients = selectedFormat === "recipients-csv";
+      const isEml        = selectedFormat === "eml";
+      fieldSection.style.display   = isRecipients ? "none" : "block";
+      emlHint.style.display        = isEml        ? "block" : "none";
+      attTypeSection.style.display = chkSaveAttachments.checked ? "block" : "none";
     }
     updateFieldVisibility();
+
+    chkSaveAttachments.addEventListener("change", updateFieldVisibility);
 
     // Enable/disable domain input with the checkbox
     chkFilterDomain.addEventListener("change", () => {
@@ -530,6 +535,7 @@
         filterExcludedDomain:   chkFilterDomain.checked,
         excludedDomain:         excludedDomainInput.value.trim() || ".ibm.com",
         flaggedOnly:            document.getElementById("chk-flagged-only").checked,
+        saveAttachments:        chkSaveAttachments.checked,
         attachmentTypes:        getAttachmentTypes(),
       };
     }
@@ -748,7 +754,6 @@
           "emails-csv":     `${count} messages saved to CSV`,
           "eml":            `${count} .eml files exported`,
           "json":           `${count} messages saved to JSON`,
-          "attachments":    `${count} attachment file(s) saved`,
         };
         resultMsg.style.display = "block";
         resultMsg.className = "ok";

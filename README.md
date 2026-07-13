@@ -12,14 +12,14 @@ flowchart TD
     B -- Yes --> D
     D --> E[Load Folders\nGET /me/mailFolders recursive]
     E --> F[Folder tree rendered\nwith checkboxes + item counts]
-    F --> G[User selects folders\n+ export format + field options]
+    F --> G[User selects folders\n+ export format\n+ field options\n+ filters\n+ save attachments toggle]
     G --> H[Run Extraction\nGET messages per folder, paginated]
     H --> I{Export format}
     I -- Recipients CSV --> J1[Unique addresses deduplicated\noutput/recipients_TIMESTAMP.csv]
     I -- Emails CSV --> J2[One row per message\noutput/emails_TIMESTAMP.csv]
     I -- EML Files --> J3[One .eml per message\noutput/eml_export_TIMESTAMP/]
     I -- JSON --> J4[Structured array\noutput/emails_TIMESTAMP.json]
-    I -- Attachments --> J5[Binary files by folder\noutput/attachments_TIMESTAMP/FolderName/]
+    J1 & J2 & J3 & J4 -->|saveAttachments=true| J5[Attachment files by folder\noutput/attachments_TIMESTAMP/FolderName/\nfilterable by type]
 ```
 
 ## Export Formats
@@ -30,7 +30,6 @@ flowchart TD
 | **Emails CSV** | One row per message, configurable fields | Spreadsheet analysis |
 | **EML Files** | One `.eml` file per message, organised by folder | Archive / import into another mail client |
 | **JSON** | Structured array of message objects | Data processing / scripting |
-| **Attachments** | Binary attachment files saved by mailbox folder, filterable by type (PDF, Word, PowerPoint, Excel, Images) | Extract specific file types from emails |
 
 ## Field Options (CSV / JSON / EML)
 
@@ -38,13 +37,14 @@ Toggle which fields to include per message:
 
 - **From** · **To / CC** · **Subject** · **Body (plain text)** · **Body (HTML)** · **Attachments metadata**
 
-## Filters
+## Filters & Options
 
-| Filter | Control | Effect |
-|---|---|---|
-| **Domain exclusion** | "Exclude addresses containing" checkbox + text field | Skips addresses that contain the given substring (default: `.ibm.com`) |
-| **Flagged emails only** | 🚩 "Flagged emails only" checkbox | Exports only messages flagged/marked for follow-up in Outlook; works with all export formats |
-| **Date range** | "Scan emails since" date picker | Restricts scan to messages on or after the chosen date |
+| Control | Effect |
+|---|---|
+| "Exclude addresses containing" | Skips addresses containing the given substring (default: `.ibm.com`) |
+| 🚩 "Flagged emails only" | Exports only flagged/follow-up messages; combines with every format |
+| 📎 "Also save attachment files to disk" | Saves binary attachment files to `output/attachments_TIMESTAMP/<Folder>/` alongside the primary export; combinable with every format; file type filterable (PDF, Word, PowerPoint, Excel, Images) |
+| "Scan emails since" | Restricts to messages on or after the chosen date |
 
 ## Prerequisites
 

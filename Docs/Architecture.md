@@ -89,15 +89,15 @@ flowchart TD
     B -- Yes --> D
     D --> E[Load Folders\nGET /me/mailFolders recursive]
     E --> F[Folder tree rendered\ncheckboxes + item counts]
-    F --> G[User picks folders\n+ export format\n+ field toggles\n+ domain filter\n+ flagged filter]
+    F --> G[User picks folders\n+ export format\n+ field toggles\n+ domain filter\n+ flagged filter\n+ save attachments toggle]
     G --> H[Run Extraction\nGET messages per folder, paginated\n$select only requested fields]
     H --> I{Export format}
-    I --> J1["Recipients CSV\nDeduplicate addresses\noutput/recipients_TIMESTAMP.csv"]
-    I --> J2["Emails CSV\nOne row per message\noutput/emails_TIMESTAMP.csv"]
-    I --> J3["JSON\nStructured array\noutput/emails_TIMESTAMP.json"]
-    I --> J4["EML Files\nOne .eml per message\noutput/eml_export_TIMESTAMP/FolderName/"]
-    I --> J5["Attachments\nBinary files by folder\noutput/attachments_TIMESTAMP/FolderName/"]
-    J1 & J2 & J3 & J4 & J5 --> K([Open Output\nshell.openPath])
+    I --> J1["Recipients CSV\noutput/recipients_TIMESTAMP.csv"]
+    I --> J2["Emails CSV\noutput/emails_TIMESTAMP.csv"]
+    I --> J3["JSON\noutput/emails_TIMESTAMP.json"]
+    I --> J4["EML Files\noutput/eml_export_TIMESTAMP/FolderName/"]
+    J1 & J2 & J3 & J4 --> K([Open Output\nshell.openPath])
+    J1 & J2 & J3 & J4 -->|saveAttachments=true| ATT["Attachment files\noutput/attachments_TIMESTAMP/FolderName/\nfiltered by type"]
 ```
 
 ---
@@ -121,7 +121,7 @@ flowchart TD
 
 ```typescript
 interface ExportParams {
-  exportFormat:           "recipients-csv" | "emails-csv" | "eml" | "json" | "attachments";
+  exportFormat:           "recipients-csv" | "emails-csv" | "eml" | "json";
   includeFrom:            boolean;
   includeToCC:            boolean;
   includeSubject:         boolean;
@@ -131,9 +131,10 @@ interface ExportParams {
   filterExcludedDomain:   boolean;
   excludedDomain:         string;   // e.g. ".ibm.com" — editable in the UI
   flaggedOnly:            boolean;  // when true, skip messages whose flag.flagStatus ≠ "flagged"
+  saveAttachments:        boolean;  // when true, binary attachment files are also saved to disk
   attachmentTypes:        string[]; // [] or ["all"] = all types; else subset of:
                                     //   "pdf" | "docx" | "pptx" | "xlsx" | "images"
-  // note: field toggles are ignored for "recipients-csv" and "attachments" formats
+  // note: field toggles are ignored for "recipients-csv" format
 }
 ```
 
@@ -152,7 +153,7 @@ interface ExportParams {
 
 ## Graph API — Attachments Download Strategy
 
-For the `attachments` export format the main process makes two Graph calls per message that has attachments:
+When `saveAttachments = true`, the main process makes two Graph calls per message that has attachments:
 
 1. **`GET /me/messages/{id}/attachments?$select=id,name,contentType,@microsoft.graph.downloadUrl`**
    Returns the attachment list. `fileAttachment` items include `contentBytes` (base64) inline.

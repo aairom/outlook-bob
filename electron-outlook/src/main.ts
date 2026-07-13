@@ -54,8 +54,8 @@ interface Recipient {
 }
 
 export interface ExportParams {
-  /** "recipients-csv" | "emails-csv" | "eml" | "json" | "attachments" */
-  exportFormat: "recipients-csv" | "emails-csv" | "eml" | "json" | "attachments";
+  /** "recipients-csv" | "emails-csv" | "eml" | "json" */
+  exportFormat: "recipients-csv" | "emails-csv" | "eml" | "json";
   includeFrom:            boolean;
   includeToCC:            boolean;
   includeSubject:         boolean;
@@ -67,8 +67,10 @@ export interface ExportParams {
   excludedDomain:         string;
   /** When true, only messages with flag.flagStatus === "flagged" are exported. */
   flaggedOnly:            boolean;
+  /** When true, attachment files are saved to disk alongside the primary export. */
+  saveAttachments:        boolean;
   /**
-   * File-type filter for the "attachments" export.
+   * File-type filter for attachment saving.
    * Empty array (or ["all"]) means save every file type.
    * Otherwise contains one or more of: "pdf","docx","pptx","xlsx","images"
    */
@@ -275,17 +277,12 @@ function buildSelectFields(params: ExportParams): string {
   // Always fetch flag status when the flaggedOnly filter is active
   if (params.flaggedOnly) { fields.add("flag"); }
 
+  // Always need hasAttachments when saving attachments alongside
+  if (params.saveAttachments) { fields.add("hasAttachments"); fields.add("from"); }
+
   if (params.exportFormat === "recipients-csv") {
     fields.add("toRecipients");
     fields.add("ccRecipients");
-    fields.add("from");
-    return [...fields].join(",");
-  }
-
-  // Attachments export only needs hasAttachments to skip empty messages
-  if (params.exportFormat === "attachments") {
-    fields.add("hasAttachments");
-    fields.add("subject");
     fields.add("from");
     return [...fields].join(",");
   }
@@ -404,6 +401,39 @@ async function fetchAttachmentsFull(
   } catch { return []; }
 }
 
+// ── Save attachments for a single message (shared by all export runners) ──────
+/**
+ * Downloads and writes attachment files for `messageId` into `folderDir`.
+ * Applies the `attachmentTypes` filter and deduplicates filenames.
+ * Returns the number of files written.
+ */
+async function saveAttachmentsForMessage(
+  token: string,
+  messageId: string,
+  folderDir: string,
+  attachmentTypes: string[]
+): Promise<number> {
+  const attachments = await fetchAttachmentsFull(token, messageId);
+  let written = 0;
+  for (const att of attachments) {
+    if (!att.content) continue;
+    if (!isAttachmentTypeAllowed(att.name, attachmentTypes)) continue;
+    fs.mkdirSync(folderDir, { recursive: true });
+    const safeName = att.name.replace(/[/\\:*?"<>|]/g, "_");
+    let destPath = path.join(folderDir, safeName);
+    let suffix = 1;
+    while (fs.existsSync(destPath)) {
+      const ext  = path.extname(safeName);
+      const base = path.basename(safeName, ext);
+      destPath = path.join(folderDir, `${base}_${suffix}${ext}`);
+      suffix++;
+    }
+    fs.writeFileSync(destPath, att.content);
+    written++;
+  }
+  return written;
+}
+
 // ── Address helpers ───────────────────────────────────────────────────────────
 function isExcluded(addr: string, domain: string): boolean {
   const d = (domain || EXCLUDED_DOMAIN).trim();
@@ -487,6 +517,22 @@ async function runRecipientsExport(
   });
   const filePath = path.join(getOutputDir(), `recipients_${timestamp()}.csv`);
   fs.writeFileSync(filePath, "Name,Email,LastSent\n" + rows.join("\n"), "utf-8");
+
+  if (params.saveAttachments) {
+    onProgress("Downloading attachments for matched messages…");
+    const attDir = path.join(getOutputDir(), `attachments_${timestamp()}`);
+    let attCount = 0;
+    for (const folder of folders) {
+      const safeFolder = folder.displayName.replace(/[/\\:*?"<>|]/g, "_");
+      const folderDir  = path.join(attDir, safeFolder);
+      for await (const msg of iterFolderMessages(token, folder.id, since, buildSelectFields(params))) {
+        if (!msg["hasAttachments"]) continue;
+        attCount += await saveAttachmentsForMessage(token, msg["id"] as string, folderDir, params.attachmentTypes);
+      }
+    }
+    onProgress(`Attachments saved: ${attCount} file(s) → ${attDir}`);
+  }
+
   return { filePath, count: recipients.size };
 }
 
@@ -549,7 +595,37 @@ async function runEmailsCsvExport(
 
   const filePath = path.join(getOutputDir(), `emails_${timestamp()}.csv`);
   fs.writeFileSync(filePath, headers.join(",") + "\n" + rows.join("\n"), "utf-8");
+  await maybeSaveAttachments(token, folders, since, params, onProgress);
   return { filePath, count: rows.length };
+}
+
+// shared: save attachments after any export run
+async function maybeSaveAttachments(
+  token: string, folders: MailFolder[], since: string | undefined,
+  params: ExportParams, onProgress: (msg: string) => void
+): Promise<void> {
+  if (!params.saveAttachments) return;
+  onProgress("Downloading attachments for matched messages…");
+  const attDir = path.join(getOutputDir(), `attachments_${timestamp()}`);
+  let attCount = 0;
+  for (const folder of folders) {
+    const safeFolder = folder.displayName.replace(/[/\\:*?"<>|]/g, "_");
+    const folderDir  = path.join(attDir, safeFolder);
+    const attSelect  = ["id", "hasAttachments", "from", "sentDateTime",
+                        ...(params.flaggedOnly ? ["flag"] : [])].join(",");
+    for await (const msg of iterFolderMessages(token, folder.id, since, attSelect)) {
+      if (params.flaggedOnly) {
+        const flagStatus = ((msg["flag"] as Record<string,string>|undefined)?.["flagStatus"]) ?? "";
+        if (flagStatus !== "flagged") continue;
+      }
+      const fromEa = ((msg["from"] as Record<string,unknown>|undefined)?.["emailAddress"] as Record<string,string>|undefined) ?? {};
+      const { email: fromEmail } = extractAddress(fromEa);
+      if (params.filterExcludedDomain && fromEmail && isExcluded(fromEmail, params.excludedDomain)) continue;
+      if (!msg["hasAttachments"]) continue;
+      attCount += await saveAttachmentsForMessage(token, msg["id"] as string, folderDir, params.attachmentTypes);
+    }
+  }
+  onProgress(`Attachments saved: ${attCount} file(s) → ${attDir}`);
 }
 
 // ── FORMAT: JSON (array of message objects) ───────────────────────────────────
@@ -603,6 +679,7 @@ async function runJsonExport(
 
   const filePath = path.join(getOutputDir(), `emails_${timestamp()}.json`);
   fs.writeFileSync(filePath, JSON.stringify(records, null, 2), "utf-8");
+  await maybeSaveAttachments(token, folders, since, params, onProgress);
   return { filePath, count: records.length };
 }
 
@@ -635,67 +712,6 @@ function buildEml(msg: Record<string, unknown>, folderName: string): string {
     ``,
     content,
   ].join("\r\n");
-}
-
-// ── FORMAT: attachments (save binary files organised by mailbox folder) ────────
-async function runAttachmentsExport(
-  token: string, folders: MailFolder[], since: string | undefined,
-  params: ExportParams, onProgress: (msg: string) => void
-): Promise<{ filePath: string; count: number }> {
-  const selectFields = buildSelectFields(params);
-  const exportDir = path.join(getOutputDir(), `attachments_${timestamp()}`);
-  fs.mkdirSync(exportDir, { recursive: true });
-  let count = 0; let msgTotal = 0;
-
-  onProgress(`Saving attachments → ${exportDir}`);
-  for (const folder of folders) {
-    const safeFolder = folder.displayName.replace(/[/\\:*?"<>|]/g, "_");
-    const folderDir  = path.join(exportDir, safeFolder);
-    onProgress(`📁 ${folder.displayName}…`);
-
-    for await (const msg of iterFolderMessages(token, folder.id, since, selectFields)) {
-      msgTotal++;
-      if (msgTotal % 25 === 0) onProgress(`Scanned ${msgTotal} messages, saved ${count} attachments…`);
-
-      if (params.flaggedOnly) {
-        const flagStatus = ((msg["flag"] as Record<string,string>|undefined)?.["flagStatus"]) ?? "";
-        if (flagStatus !== "flagged") continue;
-      }
-
-      const fromEa = ((msg["from"] as Record<string,unknown>|undefined)?.["emailAddress"] as Record<string,string>|undefined) ?? {};
-      const { email: fromEmail } = extractAddress(fromEa);
-      if (params.filterExcludedDomain && fromEmail && isExcluded(fromEmail, params.excludedDomain)) continue;
-
-      if (!msg["hasAttachments"]) continue;
-
-      const attachments = await fetchAttachmentsFull(token, msg["id"] as string);
-      if (attachments.length === 0) continue;
-
-      // Create the folder-named subdirectory only when there are actual files to write
-      fs.mkdirSync(folderDir, { recursive: true });
-
-      for (const att of attachments) {
-        if (!att.content) continue;
-        // Apply file-type filter
-        if (!isAttachmentTypeAllowed(att.name, params.attachmentTypes)) continue;
-        // Build a safe filename: deduplicate by appending a counter if needed
-        const safeName = att.name.replace(/[/\\:*?"<>|]/g, "_");
-        let destPath = path.join(folderDir, safeName);
-        let suffix = 1;
-        while (fs.existsSync(destPath)) {
-          const ext  = path.extname(safeName);
-          const base = path.basename(safeName, ext);
-          destPath = path.join(folderDir, `${base}_${suffix}${ext}`);
-          suffix++;
-        }
-        fs.writeFileSync(destPath, att.content);
-        count++;
-      }
-    }
-  }
-
-  onProgress(`Saved ${count} attachment(s) from ${msgTotal} message(s) scanned.`);
-  return { filePath: exportDir, count };
 }
 
 async function runEmlExport(
@@ -737,6 +753,7 @@ async function runEmlExport(
   }
 
   onProgress(`Exported ${count} .eml files (${total} scanned).`);
+  await maybeSaveAttachments(token, folders, since, params, onProgress);
   return { filePath: exportDir, count };
 }
 
@@ -816,11 +833,10 @@ ipcMain.handle("start-extraction", async (
     let result: { filePath: string; count: number };
 
     switch (exportParams.exportFormat) {
-      case "emails-csv":   result = await runEmailsCsvExport(token, selected, since, exportParams, onProgress); break;
-      case "json":         result = await runJsonExport(token, selected, since, exportParams, onProgress); break;
-      case "eml":          result = await runEmlExport(token, selected, since, exportParams, onProgress); break;
-      case "attachments":  result = await runAttachmentsExport(token, selected, since, exportParams, onProgress); break;
-      default:             result = await runRecipientsExport(token, selected, since, exportParams, onProgress);
+      case "emails-csv": result = await runEmailsCsvExport(token, selected, since, exportParams, onProgress); break;
+      case "json":       result = await runJsonExport(token, selected, since, exportParams, onProgress); break;
+      case "eml":        result = await runEmlExport(token, selected, since, exportParams, onProgress); break;
+      default:           result = await runRecipientsExport(token, selected, since, exportParams, onProgress);
     }
 
     if (result.count === 0) {

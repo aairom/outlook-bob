@@ -104,17 +104,36 @@ and renders it with item counts and expand/collapse controls.
 | **Emails CSV** | One row per message with your selected fields |
 | **EML Files** | One `.eml` file per message, organised by folder |
 | **JSON** | Structured array of message objects |
-| **Attachments** | Attached files saved as binary files, sub-foldered by mailbox folder name; filterable by file type |
 
 ### Step 4 — Select fields *(CSV / JSON / EML)*
 Toggle which fields to include per message:
 **From · To/CC · Subject · Body (plain text) · Body (HTML) · Attachments metadata**
 
 > EML exports always include From, To/CC, Subject, and Body — field toggles apply to extra metadata only.
-> Field toggles are not shown for **Recipients CSV** and **Attachments** (not applicable).
+> Field toggles are not shown for **Recipients CSV** (not applicable).
 
-### Step 4b — Attachment file types *(Attachments format only)*
-When the **Attachments** format is selected, a file-type picker appears below the flagged filter:
+### Step 5 — Domain filter
+The **"Exclude addresses containing"** field pre-fills from `EXCLUDED_DOMAIN` in `.env`.
+Edit it directly in the UI, or uncheck the box to disable filtering entirely.
+
+### Step 6 — (Optional) Flagged emails only
+Check **"🚩 Flagged emails only"** to restrict the extraction to messages flagged/marked
+for follow-up in Outlook. Combines with all other filters and export formats.
+
+### Step 7 — (Optional) Also save attachment files to disk
+Check **"📎 Also save attachment files to disk"** to save every attached file to
+`output/attachments_TIMESTAMP/<FolderName>/` **in addition** to the primary export.
+
+This option works alongside **every** export format:
+
+| Combined with | Result |
+|---|---|
+| Recipients CSV | CSV saved + attachment files downloaded |
+| Emails CSV | CSV saved + attachment files downloaded |
+| EML Files | .eml files saved + attachment files downloaded |
+| JSON | JSON saved + attachment files downloaded |
+
+When this toggle is checked, a **file-type picker** appears:
 
 | Chip | Saved extensions |
 |---|---|
@@ -126,23 +145,13 @@ When the **Attachments** format is selected, a file-type picker appears below th
 | **🖼️ Images** | `.jpg` `.jpeg` `.png` `.gif` `.bmp` `.webp` `.tiff` `.svg` `.heic` |
 
 - Select **All types** to save every attachment regardless of extension.
-- Select one or more specific types to save only those (combinations are allowed — e.g. PDF + Images).
-- Selecting a specific type automatically deselects **All types**, and deselecting all specific types reverts to **All types**.
+- Select one or more specific types (combinations allowed — e.g. PDF + Images).
+- Deselecting all specific types automatically reverts to **All types**.
 
-### Step 5 — Domain filter
-The **"Exclude addresses containing"** field pre-fills from `EXCLUDED_DOMAIN` in `.env`.
-Edit it directly in the UI, or uncheck the box to disable filtering entirely.
-
-### Step 6 — (Optional) Flagged emails only
-Check **"🚩 Flagged emails only"** to restrict the extraction to messages that have been
-flagged / marked for follow-up in Outlook. When enabled, unflagged messages are silently
-skipped in every export format. This filter combines with all other filters (domain exclusion,
-date range, field toggles, folder selection).
-
-### Step 7 — (Optional) Date filter
+### Step 8 — (Optional) Date filter
 Enter a **"Scan emails since"** date to limit the scan to messages on or after that date.
 
-### Step 8 — Run
+### Step 9 — Run
 Click **"Run Extraction"**. The progress log shows live updates:
 
 ```
