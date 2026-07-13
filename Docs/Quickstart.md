@@ -115,10 +115,16 @@ Toggle which fields to include per message:
 The **"Exclude addresses containing"** field pre-fills from `EXCLUDED_DOMAIN` in `.env`.
 Edit it directly in the UI, or uncheck the box to disable filtering entirely.
 
-### Step 6 — (Optional) Date filter
+### Step 6 — (Optional) Flagged emails only
+Check **"🚩 Flagged emails only"** to restrict the extraction to messages that have been
+flagged / marked for follow-up in Outlook. When enabled, unflagged messages are silently
+skipped in every export format. This filter combines with all other filters (domain exclusion,
+date range, field toggles, folder selection).
+
+### Step 7 — (Optional) Date filter
 Enter a **"Scan emails since"** date to limit the scan to messages on or after that date.
 
-### Step 7 — Run
+### Step 8 — Run
 Click **"Run Extraction"**. The progress log shows live updates:
 
 ```

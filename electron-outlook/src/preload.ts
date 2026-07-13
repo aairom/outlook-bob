@@ -18,6 +18,7 @@ export interface ExportParams {
   includeAttachmentsMeta: boolean;
   filterExcludedDomain:   boolean;
   excludedDomain:         string;
+  flaggedOnly:            boolean;
 }
 
 contextBridge.exposeInMainWorld("electronAPI", {

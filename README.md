@@ -36,6 +36,14 @@ Toggle which fields to include per message:
 
 - **From** · **To / CC** · **Subject** · **Body (plain text)** · **Body (HTML)** · **Attachments metadata**
 
+## Filters
+
+| Filter | Control | Effect |
+|---|---|---|
+| **Domain exclusion** | "Exclude addresses containing" checkbox + text field | Skips addresses that contain the given substring (default: `.ibm.com`) |
+| **Flagged emails only** | 🚩 "Flagged emails only" checkbox | Exports only messages flagged/marked for follow-up in Outlook; works with all export formats |
+| **Date range** | "Scan emails since" date picker | Restricts scan to messages on or after the chosen date |
+
 ## Prerequisites
 
 | Tool | Required for | Check |

@@ -65,6 +65,8 @@ export interface ExportParams {
   filterExcludedDomain:   boolean;
   /** Domain substring to exclude, e.g. ".ibm.com". Falls back to env EXCLUDED_DOMAIN. */
   excludedDomain:         string;
+  /** When true, only messages with flag.flagStatus === "flagged" are exported. */
+  flaggedOnly:            boolean;
 }
 
 // ── Token cache ───────────────────────────────────────────────────────────────
@@ -244,6 +246,9 @@ async function graphGet(token: string, url: string): Promise<unknown> {
 function buildSelectFields(params: ExportParams): string {
   const fields = new Set<string>(["id", "sentDateTime"]);
 
+  // Always fetch flag status when the flaggedOnly filter is active
+  if (params.flaggedOnly) { fields.add("flag"); }
+
   if (params.exportFormat === "recipients-csv") {
     fields.add("toRecipients");
     fields.add("ccRecipients");
@@ -374,6 +379,10 @@ async function runRecipientsExport(
     onProgress(`📁 ${folder.displayName}…`);
     for await (const msg of iterFolderMessages(token, folder.id, since, selectFields)) {
       total++;
+      if (params.flaggedOnly) {
+        const flagStatus = ((msg["flag"] as Record<string,string>|undefined)?.["flagStatus"]) ?? "";
+        if (flagStatus !== "flagged") continue;
+      }
       if (total % 100 === 0)
         onProgress(`Processed ${total} emails — ${recipients.size} unique recipients so far…`);
       const sentDate = new Date((msg["sentDateTime"] as string | undefined) ?? "");
@@ -425,6 +434,11 @@ async function runEmailsCsvExport(
     for await (const msg of iterFolderMessages(token, folder.id, since, selectFields)) {
       total++;
       if (total % 50 === 0) onProgress(`Fetched ${total} messages…`);
+
+      if (params.flaggedOnly) {
+        const flagStatus = ((msg["flag"] as Record<string,string>|undefined)?.["flagStatus"]) ?? "";
+        if (flagStatus !== "flagged") continue;
+      }
 
       const fromEa = ((msg["from"] as Record<string,unknown>|undefined)?.["emailAddress"] as Record<string,string>|undefined) ?? {};
       const { name: fromName, email: fromEmail } = extractAddress(fromEa);
@@ -479,6 +493,11 @@ async function runJsonExport(
     for await (const msg of iterFolderMessages(token, folder.id, since, selectFields)) {
       total++;
       if (total % 50 === 0) onProgress(`Fetched ${total} messages…`);
+
+      if (params.flaggedOnly) {
+        const flagStatus = ((msg["flag"] as Record<string,string>|undefined)?.["flagStatus"]) ?? "";
+        if (flagStatus !== "flagged") continue;
+      }
 
       const fromEa = ((msg["from"] as Record<string,unknown>|undefined)?.["emailAddress"] as Record<string,string>|undefined) ?? {};
       const { name: fromName, email: fromEmail } = extractAddress(fromEa);
@@ -563,6 +582,11 @@ async function runEmlExport(
     for await (const msg of iterFolderMessages(token, folder.id, since, selectFields)) {
       total++;
       if (total % 25 === 0) onProgress(`Written ${count} .eml files…`);
+
+      if (params.flaggedOnly) {
+        const flagStatus = ((msg["flag"] as Record<string,string>|undefined)?.["flagStatus"]) ?? "";
+        if (flagStatus !== "flagged") continue;
+      }
 
       const fromEa = ((msg["from"] as Record<string,unknown>|undefined)?.["emailAddress"] as Record<string,string>|undefined) ?? {};
       const { email: fromEmail } = extractAddress(fromEa);

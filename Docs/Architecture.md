@@ -129,6 +129,7 @@ interface ExportParams {
   includeAttachmentsMeta: boolean;
   filterExcludedDomain:   boolean;
   excludedDomain:         string;   // e.g. ".ibm.com" — editable in the UI
+  flaggedOnly:            boolean;  // when true, skip messages whose flag.flagStatus ≠ "flagged"
 }
 ```
 
