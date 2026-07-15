@@ -32,3 +32,6 @@ build/
 
 # Token cache (local auth tokens)
 extract_outlook_token.json
+
+# Bob MCP config — contains API tokens (Monday JWT, etc.)
+.bob/mcp.json

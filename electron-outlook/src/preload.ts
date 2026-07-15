@@ -57,7 +57,7 @@ interface MondayItem {
 
 contextBridge.exposeInMainWorld("electronAPI", {
   // ── Queries ────────────────────────────────────────────────────────────────
-  getStatus: (): Promise<{ authenticated: boolean }> =>
+  getStatus: (): Promise<{ authenticated: boolean; mondayBaseUrl: string }> =>
     ipcRenderer.invoke("get-status"),
 
   connect: (): Promise<{ authenticated: boolean }> =>

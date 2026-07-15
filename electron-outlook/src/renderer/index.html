@@ -994,8 +994,8 @@
     const mondayAddResult    = document.getElementById("monday-add-result");
 
     const BOARD_KIND_ICONS = { public: "🌐", private: "🔒", share: "🔗" };
-    // Monday.com base URL for item links
-    const MONDAY_BASE = "https://ibm.monday.com";
+    // Populated at boot from process.env.MONDAY_BASE_URL via get-status
+    let MONDAY_BASE = "https://monday.com";
 
     let selectedBoardId = null;
 
@@ -1260,7 +1260,8 @@
     // ── Boot ──────────────────────────────────────────────────────────────────
     (async () => {
       resetUI();
-      const { authenticated } = await api.getStatus();
+      const { authenticated, mondayBaseUrl } = await api.getStatus();
+      if (mondayBaseUrl) MONDAY_BASE = mondayBaseUrl;
       setAuthenticated(authenticated);
     })();
   </script>

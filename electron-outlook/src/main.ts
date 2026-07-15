@@ -26,8 +26,9 @@ const SCOPES          = "Mail.Read offline_access";
 const REDIRECT_URI    = process.env.REDIRECT_URI  ?? "http://localhost:8765";
 const REDIRECT_PORT   = parseInt(new URL(REDIRECT_URI).port || "8765", 10);
 const GRAPH_BASE      = "https://graph.microsoft.com/v1.0";
-const EXCLUDED_DOMAIN = process.env.EXCLUDED_DOMAIN ?? ".ibm.com";
-const LOGIN_HINT      = process.env.LOGIN_HINT ?? "";
+const EXCLUDED_DOMAIN  = process.env.EXCLUDED_DOMAIN  ?? ".ibm.com";
+const LOGIN_HINT       = process.env.LOGIN_HINT       ?? "";
+const MONDAY_BASE_URL  = process.env.MONDAY_BASE_URL  ?? "https://monday.com";
 
 function getTokenCacheFile(): string {
   return path.join(app.getPath("home"), ".cache", "extract_outlook_token_folder.json");
@@ -1020,7 +1021,7 @@ function send(channel: string, payload: unknown): void {
 
 ipcMain.handle("get-status", async () => {
   const token = await getAccessTokenSilent();
-  return { authenticated: token !== null };
+  return { authenticated: token !== null, mondayBaseUrl: MONDAY_BASE_URL };
 });
 
 ipcMain.handle("connect", async () => {
