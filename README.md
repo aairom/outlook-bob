@@ -70,6 +70,8 @@ For a complete beginner-friendly guide, see [`Docs/Quickstart.md`](Docs/Quicksta
 
 ### 1. Clone the repository
 
+Open a terminal window, go to the folder where you want to download the project, and then run:
+
 ```bash
 git clone <repository-url>
 cd Outlook-Bob

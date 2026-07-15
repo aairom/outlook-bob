@@ -24,7 +24,7 @@ Graph Explorer client which works for any Microsoft 365 account.
 
 ## 2. Clone the repository
 
-Open a terminal and run these commands one line at a time:
+Open a terminal window, go to the folder where you want to download the project, and then run these commands one line at a time:
 
 ```bash
 git clone <repository-url>
