@@ -12,6 +12,9 @@ on:
       - "electron-outlook/tsconfig.json"
       - ".github/workflows/build-mac.yml"
 
+permissions:
+  contents: write
+
 jobs:
   build:
     name: Build & Package (macOS arm64)
