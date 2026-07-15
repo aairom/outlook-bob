@@ -1,6 +1,6 @@
 # Architecture — Outlook Folder Extractor
 
-## Application Overview
+## Application Overview 
 
 The **Electron Folder Extractor** is a native desktop app that authenticates against
 Microsoft Identity Platform via OAuth 2.0 Authorization Code + PKCE, fetches your
