@@ -22,7 +22,14 @@ Graph Explorer client which works for any Microsoft 365 account.
 
 ---
 
-## 2. Configure (optional)
+## 2. Clone the repository
+
+```bash
+git clone <repository-url>
+cd Outlook-Bob
+```
+
+## 3. Configure (optional)
 
 Copy `.env.example` to `.env` at the project root. All defaults work out of the box —
 editing is only needed if you want to use your own Azure App Registration or change
@@ -53,7 +60,7 @@ Copy-Item .env.example .env
 
 ---
 
-## 3. Launch
+## 4. Launch
 
 The scripts handle `npm install` and TypeScript compilation automatically.
 
@@ -77,7 +84,7 @@ cd electron-outlook && npm start
 
 ---
 
-## 4. Using the app
+## 5. Using the app
 
 ### Step 1 — Connect
 Click **"Connect to Microsoft"**. Your browser opens the Microsoft sign-in page.  
@@ -201,7 +208,7 @@ Click **"Open Output"** to open the result file or folder.
 
 ---
 
-## 5. Output
+## 6. Output
 
 All exports go to `electron-outlook/output/` (gitignored):
 
@@ -266,7 +273,7 @@ sqlite3 electron-outlook/output/emails.sqlite \
 
 ---
 
-## 6. Stop the app
+## 7. Stop the app
 
 **macOS / Linux:**
 ```bash
@@ -280,7 +287,7 @@ powershell -ExecutionPolicy Bypass -File scripts\stop-electron-outlook.ps1
 
 ---
 
-## 7. Force re-login (clear token cache)
+## 8. Force re-login (clear token cache)
 
 **macOS / Linux:**
 ```bash
