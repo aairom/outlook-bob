@@ -55,6 +55,13 @@ interface Recipient {
   date: string;
 }
 
+interface MessageExportIdentity {
+  exportId: string;
+  messageId: string;
+  internetMessageId: string;
+  outlookWebLink: string;
+}
+
 export interface ExportParams {
   /** "recipients-csv" | "emails-csv" | "eml" | "json" | "sqlite" */
   exportFormat: "recipients-csv" | "emails-csv" | "eml" | "json" | "sqlite";
@@ -271,12 +278,16 @@ async function authenticateInteractive(onProgress: (msg: string) => void): Promi
 
 // ── Graph API helpers ─────────────────────────────────────────────────────────
 async function graphGet(token: string, url: string): Promise<unknown> {
-  return JSON.parse(await httpsGet(url, { Authorization: `Bearer ${token}`, Accept: "application/json" }));
+  return JSON.parse(await httpsGet(url, {
+    Authorization: `Bearer ${token}`,
+    Accept: "application/json",
+    Prefer: 'IdType="ImmutableId"',
+  }));
 }
 
 // ── Build $select field list from export params ───────────────────────────────
 function buildSelectFields(params: ExportParams): string {
-  const fields = new Set<string>(["id", "sentDateTime"]);
+  const fields = new Set<string>(["id", "sentDateTime", "internetMessageId", "webLink"]);
 
   // Always fetch flag status when the flaggedOnly filter is active
   if (params.flaggedOnly) { fields.add("flag"); }
@@ -460,6 +471,17 @@ function recipientListStr(list: Array<Record<string, unknown>>): string {
   }).filter(Boolean).join("; ");
 }
 
+function buildMessageExportIdentity(msg: Record<string, unknown>): MessageExportIdentity {
+  const messageId = String(msg["id"] ?? "");
+  const internetMessageId = String(msg["internetMessageId"] ?? "");
+  return {
+    exportId: crypto.createHash("sha256").update(`${messageId}\n${internetMessageId}`).digest("hex"),
+    messageId,
+    internetMessageId,
+    outlookWebLink: String(msg["webLink"] ?? ""),
+  };
+}
+
 // ── Output directory ──────────────────────────────────────────────────────────
 function getOutputDir(): string {
   const dir = app.isPackaged
@@ -581,7 +603,7 @@ async function runEmailsCsvExport(
 ): Promise<{ filePath: string; count: number }> {
   const selectFields = buildSelectFields(params);
   const esc = (s: string) => `"${String(s).replace(/"/g, '""')}"`;
-  const headers = ["messageId","sentDateTime","from","fromName","toRecipients",
+  const headers = ["exportId","messageId","internetMessageId","outlookWebLink","sentDateTime","from","fromName","toRecipients",
                    "ccRecipients","subject","bodyText","bodyHtml","attachments","folder"];
   const rows: string[] = [];
   let total = 0;
@@ -614,8 +636,12 @@ async function runEmailsCsvExport(
         attachmentsStr = JSON.stringify(atts);
       }
 
+      const identity = buildMessageExportIdentity(msg);
       rows.push([
-        esc(String(msg["id"] ?? "")),
+        esc(identity.exportId),
+        esc(identity.messageId),
+        esc(identity.internetMessageId),
+        esc(identity.outlookWebLink),
         esc(String(msg["sentDateTime"] ?? "")),
         esc(params.includeFrom    ? fromEmail  : ""),
         esc(params.includeFrom    ? fromName   : ""),
@@ -698,10 +724,14 @@ async function runJsonExport(
       const bodyContent = bodyObj?.["content"] ?? "";
       const bodyPlain   = isHtml ? bodyContent.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim() : bodyContent;
 
+      const identity = buildMessageExportIdentity(msg);
       const rec: Record<string, unknown> = {
-        messageId:    msg["id"],
-        sentDateTime: msg["sentDateTime"],
-        folder:       folder.displayName,
+        exportId:          identity.exportId,
+        messageId:         identity.messageId,
+        internetMessageId: identity.internetMessageId,
+        outlookWebLink:    identity.outlookWebLink,
+        sentDateTime:      msg["sentDateTime"],
+        folder:            folder.displayName,
       };
       if (params.includeFrom)    { rec["from"] = fromEmail; rec["fromName"] = fromName; }
       if (params.includeToCC) {
@@ -743,6 +773,8 @@ function buildEml(msg: Record<string, unknown>, folderName: string): string {
   const content = bodyObj?.["content"] ?? "";
   const mime    = isHtml ? "text/html" : "text/plain";
 
+  const identity = buildMessageExportIdentity(msg);
+
   return [
     `From: ${fromHeader}`,
     `To: ${toStr}`,
@@ -750,6 +782,10 @@ function buildEml(msg: Record<string, unknown>, folderName: string): string {
     `Subject: ${subject}`,
     `Date: ${date}`,
     `Message-ID: ${msgId}`,
+    `X-Export-ID: ${identity.exportId}`,
+    ...(identity.messageId ? [`X-Graph-Message-ID: ${identity.messageId}`] : []),
+    ...(identity.internetMessageId ? [`X-Internet-Message-ID: ${identity.internetMessageId}`] : []),
+    ...(identity.outlookWebLink ? [`X-Outlook-Web-Link: ${identity.outlookWebLink}`] : []),
     `MIME-Version: 1.0`,
     `Content-Type: ${mime}; charset=utf-8`,
     `X-Folder: ${folderName}`,
@@ -810,6 +846,9 @@ async function runEmlExport(
  *
  * Schema (emails table):
  *   message_id TEXT PRIMARY KEY
+ *   export_id TEXT
+ *   internet_message_id TEXT
+ *   outlook_web_link TEXT
  *   sent_datetime TEXT
  *   folder TEXT
  *   from_email TEXT
@@ -834,42 +873,53 @@ async function runSqliteExport(
 
   db.exec(`
     CREATE TABLE IF NOT EXISTS emails (
-      message_id      TEXT PRIMARY KEY,
-      sent_datetime   TEXT,
-      folder          TEXT,
-      from_email      TEXT,
-      from_name       TEXT,
-      to_recipients   TEXT,
-      cc_recipients   TEXT,
-      subject         TEXT,
-      body_text       TEXT,
-      body_html       TEXT,
-      attachments     TEXT,
-      exported_at     TEXT
+      message_id           TEXT PRIMARY KEY,
+      export_id            TEXT,
+      internet_message_id  TEXT,
+      outlook_web_link     TEXT,
+      sent_datetime        TEXT,
+      folder               TEXT,
+      from_email           TEXT,
+      from_name            TEXT,
+      to_recipients        TEXT,
+      cc_recipients        TEXT,
+      subject              TEXT,
+      body_text            TEXT,
+      body_html            TEXT,
+      attachments          TEXT,
+      exported_at          TEXT
     );
   `);
+  const existingColumns = db.prepare("PRAGMA table_info(emails)").all() as Array<{ name: string }>;
+  const existingColumnNames = new Set(existingColumns.map((column) => column.name));
+  if (!existingColumnNames.has("export_id")) db.exec("ALTER TABLE emails ADD COLUMN export_id TEXT");
+  if (!existingColumnNames.has("internet_message_id")) db.exec("ALTER TABLE emails ADD COLUMN internet_message_id TEXT");
+  if (!existingColumnNames.has("outlook_web_link")) db.exec("ALTER TABLE emails ADD COLUMN outlook_web_link TEXT");
 
   const upsert = db.prepare(`
     INSERT INTO emails
-      (message_id, sent_datetime, folder, from_email, from_name,
+      (message_id, export_id, internet_message_id, outlook_web_link, sent_datetime, folder, from_email, from_name,
        to_recipients, cc_recipients, subject, body_text, body_html,
        attachments, exported_at)
     VALUES
-      (@message_id, @sent_datetime, @folder, @from_email, @from_name,
+      (@message_id, @export_id, @internet_message_id, @outlook_web_link, @sent_datetime, @folder, @from_email, @from_name,
        @to_recipients, @cc_recipients, @subject, @body_text, @body_html,
        @attachments, @exported_at)
     ON CONFLICT(message_id) DO UPDATE SET
-      sent_datetime   = excluded.sent_datetime,
-      folder          = excluded.folder,
-      from_email      = excluded.from_email,
-      from_name       = excluded.from_name,
-      to_recipients   = excluded.to_recipients,
-      cc_recipients   = excluded.cc_recipients,
-      subject         = excluded.subject,
-      body_text       = excluded.body_text,
-      body_html       = excluded.body_html,
-      attachments     = excluded.attachments,
-      exported_at     = excluded.exported_at
+      export_id            = excluded.export_id,
+      internet_message_id  = excluded.internet_message_id,
+      outlook_web_link     = excluded.outlook_web_link,
+      sent_datetime        = excluded.sent_datetime,
+      folder               = excluded.folder,
+      from_email           = excluded.from_email,
+      from_name            = excluded.from_name,
+      to_recipients        = excluded.to_recipients,
+      cc_recipients        = excluded.cc_recipients,
+      subject              = excluded.subject,
+      body_text            = excluded.body_text,
+      body_html            = excluded.body_html,
+      attachments          = excluded.attachments,
+      exported_at          = excluded.exported_at
   `);
 
   const selectFields = buildSelectFields(params);
@@ -909,19 +959,23 @@ async function runSqliteExport(
       if (params.includeAttachmentsMeta && msg["hasAttachments"])
         attachmentsStr = JSON.stringify(await fetchAttachmentsMeta(token, msg["id"] as string));
 
+      const identity = buildMessageExportIdentity(msg);
       batch.push({
-        message_id:     String(msg["id"] ?? ""),
-        sent_datetime:  String(msg["sentDateTime"] ?? ""),
-        folder:         folder.displayName,
-        from_email:     params.includeFrom    ? fromEmail  : "",
-        from_name:      params.includeFrom    ? fromName   : "",
-        to_recipients:  params.includeToCC    ? recipientListStr((msg["toRecipients"] as Array<Record<string,unknown>>|undefined) ?? []) : "",
-        cc_recipients:  params.includeToCC    ? recipientListStr((msg["ccRecipients"] as Array<Record<string,unknown>>|undefined) ?? []) : "",
-        subject:        params.includeSubject ? String(msg["subject"] ?? "") : "",
-        body_text:      params.includeBodyText ? bodyPlain   : "",
-        body_html:      params.includeBodyHtml ? bodyContent : "",
-        attachments:    attachmentsStr,
-        exported_at:    exportedAt,
+        message_id:           identity.messageId,
+        export_id:            identity.exportId,
+        internet_message_id:  identity.internetMessageId,
+        outlook_web_link:     identity.outlookWebLink,
+        sent_datetime:        String(msg["sentDateTime"] ?? ""),
+        folder:               folder.displayName,
+        from_email:           params.includeFrom    ? fromEmail  : "",
+        from_name:            params.includeFrom    ? fromName   : "",
+        to_recipients:        params.includeToCC    ? recipientListStr((msg["toRecipients"] as Array<Record<string,unknown>>|undefined) ?? []) : "",
+        cc_recipients:        params.includeToCC    ? recipientListStr((msg["ccRecipients"] as Array<Record<string,unknown>>|undefined) ?? []) : "",
+        subject:              params.includeSubject ? String(msg["subject"] ?? "") : "",
+        body_text:            params.includeBodyText ? bodyPlain   : "",
+        body_html:            params.includeBodyHtml ? bodyContent : "",
+        attachments:          attachmentsStr,
+        exported_at:          exportedAt,
       });
       upserted++;
     }

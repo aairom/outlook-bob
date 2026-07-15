@@ -104,10 +104,10 @@ and renders it with item counts and expand/collapse controls.
 | Format | Output | Notes |
 |---|---|---|
 | **Recipients CSV** | Unique sender/recipient addresses + display names | Timestamped file |
-| **Emails CSV** | One row per message with your selected fields | Timestamped file |
-| **EML Files** | One `.eml` file per message, organised by folder | Timestamped directory |
-| **JSON** | Structured array of message objects | Timestamped file |
-| **SQLite** | Persistent `output/emails.sqlite` database | **Not timestamped** — re-run safe (no duplicates) |
+| **Emails CSV** | One row per message with your selected fields plus Outlook identifiers | Timestamped file |
+| **EML Files** | One `.eml` file per message, organised by folder, with export headers | Timestamped directory |
+| **JSON** | Structured array of message objects plus Outlook identifiers | Timestamped file |
+| **SQLite** | Persistent `output/emails.sqlite` database with Outlook identifiers | **Not timestamped** — re-run safe (no duplicates) |
 
 > **SQLite is idempotent.** Records are upserted on `message_id` — re-running adds
 > new messages and refreshes existing ones without ever creating duplicates.
@@ -116,6 +116,12 @@ and renders it with item counts and expand/collapse controls.
 ### Step 4 — Select fields *(CSV / JSON / SQLite / EML)*
 Toggle which fields to include per message:
 **From · To/CC · Subject · Body (plain text) · Body (HTML) · Attachments metadata**
+
+Message-based exports except Recipients CSV always include these correlation/reopen fields when Graph returns them:
+- `exportId`
+- `messageId` *(requested as immutable Graph ID)*
+- `internetMessageId`
+- `outlookWebLink`
 
 > **Body (plain text)** strips HTML tags automatically — Microsoft Graph always returns
 > HTML, so both body toggles always produce content when enabled.  
@@ -226,18 +232,21 @@ output/
 
 ```sql
 CREATE TABLE emails (
-  message_id      TEXT PRIMARY KEY,   -- Graph message ID — upsert key
-  sent_datetime   TEXT,
-  folder          TEXT,
-  from_email      TEXT,
-  from_name       TEXT,
-  to_recipients   TEXT,
-  cc_recipients   TEXT,
-  subject         TEXT,
-  body_text       TEXT,               -- HTML tags stripped automatically
-  body_html       TEXT,               -- raw HTML content
-  attachments     TEXT,               -- JSON string of attachment metadata
-  exported_at     TEXT                -- ISO-8601 timestamp of last upsert
+  message_id           TEXT PRIMARY KEY,   -- Immutable Graph message ID — upsert key
+  export_id            TEXT,
+  internet_message_id  TEXT,
+  outlook_web_link     TEXT,
+  sent_datetime        TEXT,
+  folder               TEXT,
+  from_email           TEXT,
+  from_name            TEXT,
+  to_recipients        TEXT,
+  cc_recipients        TEXT,
+  subject              TEXT,
+  body_text            TEXT,               -- HTML tags stripped automatically
+  body_html            TEXT,               -- raw HTML content
+  attachments          TEXT,               -- JSON string of attachment metadata
+  exported_at          TEXT                -- ISO-8601 timestamp of last upsert
 );
 ```
 

@@ -42,7 +42,7 @@ flowchart TD
     MAIN -->|OAuth 2.0 PKCE| IDP
     IDP -->|access_token + refresh_token| MAIN
     MAIN -->|GET /me/mailFolders recursive| GRAPH
-    MAIN -->|GET mailFolders + messages paginated| GRAPH
+    MAIN -->|GET mailFolders + messages paginated\nPrefer: IdType="ImmutableId"| GRAPH
     GRAPH -->|JSON| MAIN
     MAIN --> CSV1 & CSV2 & JSON & EML & SQLITE
     CSV1 & CSV2 & JSON & EML & SQLITE -->|zipOutput=true| ZIP
@@ -99,7 +99,7 @@ flowchart TD
     D --> E[Load Folders\nGET /me/mailFolders recursive]
     E --> F[Folder tree rendered\ncheckboxes + item counts]
     F --> G[User picks folders\n+ export format + field toggles\n+ domain filter + flagged filter\n+ save attachments toggle + ZIP toggle]
-    G --> H[Run Extraction\nGET messages per folder, paginated\n$select only requested fields\nbody plain text = HTML stripped]
+    G --> H[Run Extraction\nGET messages per folder, paginated\nPrefer: IdType="ImmutableId"\n$select only requested fields + webLink/internetMessageId\nbody plain text = HTML stripped]
     H --> I{Export format}
     I --> J1["Recipients CSV\noutput/recipients_TIMESTAMP.csv"]
     I --> J2["Emails CSV\noutput/emails_TIMESTAMP.csv"]
@@ -174,7 +174,7 @@ any format produces a non-empty result, when `exportParams.zipOutput === true`.
 
 | Decision | Rationale |
 |---|---|
-| `message_id TEXT PRIMARY KEY` | Graph message IDs are globally unique and stable |
+| `message_id TEXT PRIMARY KEY` | Immutable Graph message ID requested with `Prefer: IdType="ImmutableId"` |
 | `INSERT … ON CONFLICT DO UPDATE` | Upsert — re-running never adds duplicates |
 | `exported_at TEXT` | ISO-8601 timestamp of last upsert |
 | WAL journal mode | Safe for concurrent reads while writing |
@@ -184,18 +184,21 @@ any format produces a non-empty result, when `exportParams.zipOutput === true`.
 
 ```sql
 CREATE TABLE IF NOT EXISTS emails (
-  message_id      TEXT PRIMARY KEY,
-  sent_datetime   TEXT,
-  folder          TEXT,
-  from_email      TEXT,
-  from_name       TEXT,
-  to_recipients   TEXT,
-  cc_recipients   TEXT,
-  subject         TEXT,
-  body_text       TEXT,
-  body_html       TEXT,
-  attachments     TEXT,   -- JSON string of attachment metadata
-  exported_at     TEXT    -- ISO-8601 timestamp of last upsert
+  message_id           TEXT PRIMARY KEY,
+  export_id            TEXT,
+  internet_message_id  TEXT,
+  outlook_web_link     TEXT,
+  sent_datetime        TEXT,
+  folder               TEXT,
+  from_email           TEXT,
+  from_name            TEXT,
+  to_recipients        TEXT,
+  cc_recipients        TEXT,
+  subject              TEXT,
+  body_text            TEXT,
+  body_html            TEXT,
+  attachments          TEXT,   -- JSON string of attachment metadata
+  exported_at          TEXT    -- ISO-8601 timestamp of last upsert
 );
 ```
 

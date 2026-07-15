@@ -13,7 +13,7 @@ flowchart TD
     D --> E[Load Folders\nGET /me/mailFolders recursive]
     E --> F[Folder tree rendered\nwith checkboxes + item counts]
     F --> G[User selects folders\n+ export format + field options\n+ filters + save attachments toggle\n+ ZIP toggle]
-    G --> H[Run Extraction\nGET messages per folder, paginated]
+    G --> H[Run Extraction\nGET messages per folder, paginated\nPrefer: IdType="ImmutableId"]
     H --> I{Export format}
     I -- Recipients CSV --> J1[Unique addresses deduplicated\noutput/recipients_TIMESTAMP.csv]
     I -- Emails CSV --> J2[One row per message\noutput/emails_TIMESTAMP.csv]
@@ -29,10 +29,10 @@ flowchart TD
 | Format | Output | Use case |
 |---|---|---|
 | **Recipients CSV** | Unique email addresses + display names | Build a contacts list |
-| **Emails CSV** | One row per message, configurable fields | Spreadsheet analysis |
-| **EML Files** | One `.eml` file per message, organised by folder | Archive / import into another mail client |
-| **JSON** | Structured array of message objects | Data processing / scripting |
-| **SQLite** | Persistent `output/emails.sqlite` — idempotent upsert, re-run safe | Queryable store, incremental syncs |
+| **Emails CSV** | One row per message, configurable fields, plus Outlook identifiers | Spreadsheet analysis with reopen metadata |
+| **EML Files** | One `.eml` file per message, organised by folder, with export headers | Archive / import into another mail client |
+| **JSON** | Structured array of message objects, plus Outlook identifiers | Data processing / scripting |
+| **SQLite** | Persistent `output/emails.sqlite` — idempotent upsert, re-run safe, with Outlook identifiers | Queryable store, incremental syncs |
 
 ## Field Options (CSV / JSON / SQLite / EML)
 
@@ -91,6 +91,15 @@ Copy `.env.example` to `.env` at the project root. All fields are optional — d
 ## Output
 
 All exports are written to `electron-outlook/output/` (gitignored).
+
+For every message-based export except Recipients CSV, the app now writes a stable export identifier plus Outlook-specific reopen metadata where Microsoft Graph provides it:
+
+- `exportId` — SHA-256 of the immutable Graph message ID + `internetMessageId`
+- `messageId` — Graph message ID requested with `Prefer: IdType="ImmutableId"`
+- `internetMessageId` — SMTP `Message-ID` header value
+- `outlookWebLink` — Outlook on the web link returned by Microsoft Graph
+
+These fields help correlate records across CSV, JSON, EML, and SQLite exports. They improve Outlook Web reopening, but desktop Outlook deep-linking is still environment-dependent and is not guaranteed by the export alone.
 
 ```
 output/recipients_20250625_143022.csv    ← Recipients CSV (timestamped)
