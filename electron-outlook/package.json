@@ -6,7 +6,9 @@
   "scripts": {
     "build": "tsc --project tsconfig.json",
     "start": "npm run build && electron .",
-    "pack": "npm run build && electron-builder --mac",
+    "pack": "npm run build && electron-builder --mac --win",
+    "pack:mac": "npm run build && electron-builder --mac",
+    "pack:win": "npm run build && electron-builder --win",
     "postinstall": "electron-rebuild -f -w better-sqlite3"
   },
   "keywords": [],
@@ -31,7 +33,21 @@
     "appId": "com.bob.outlook-folder-extractor",
     "productName": "Outlook Folder Extractor",
     "mac": {
-      "category": "public.app-category.productivity"
+      "category": "public.app-category.productivity",
+      "target": ["dmg"]
+    },
+    "dmg": {
+      "sign": false
+    },
+    "win": {
+      "target": ["nsis"]
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "Outlook Folder Extractor"
     },
     "files": [
       "dist/**/*",

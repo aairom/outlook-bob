@@ -93,6 +93,10 @@ This script:
 powershell -ExecutionPolicy Bypass -File scripts\start-electron-outlook.ps1
 ```
 
+On the first source-based launch, the project also creates a desktop launcher for the current user:
+- macOS: `~/Desktop/Outlook Folder Extractor.command`
+- Windows: Desktop shortcut `Outlook Folder Extractor.lnk`
+
 > **First run only (Windows):** if PowerShell blocks the script, run
 > `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once in an elevated terminal.
 
@@ -117,6 +121,39 @@ After launch:
 - a desktop window named **Outlook Folder Extractor** should open
 - the app will show buttons such as **Connect to Microsoft** and **Load Folders**
 - on macOS/Linux, you can stop it later with `bash scripts/stop-electron-outlook.sh`
+
+### Installer build and usage
+
+If you want to distribute the app to non-technical users, you can build installers instead of asking them to run scripts.
+
+From the project root:
+
+**macOS installer build:**
+```bash
+cd electron-outlook
+npm install
+npm run pack:mac
+```
+
+**Windows installer build:**
+```bash
+cd electron-outlook
+npm install
+npm run pack:win
+```
+
+What these commands do:
+- `npm run pack:mac` builds a macOS `.dmg` installer package.
+- `npm run pack:win` builds a Windows installer.
+
+After the installer is built:
+- look in the `electron-outlook/dist/` folder for the generated installer files
+- on macOS, open the `.dmg`, then drag **Outlook Folder Extractor** into **Applications**
+- on Windows, run the installer wizard and keep the desktop shortcut option enabled
+
+After installation:
+- macOS users can open the app from **Applications**, **Launchpad**, or the **Dock**
+- Windows users can open it from the **Desktop shortcut** or the **Start Menu**
 
 ---
 

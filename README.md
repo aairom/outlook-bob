@@ -97,6 +97,10 @@ bash scripts/start-electron-outlook.sh
 powershell -ExecutionPolicy Bypass -File scripts\start-electron-outlook.ps1
 ```
 
+On the first source-based launch, the project also creates a desktop launcher for the current user:
+- macOS: `~/Desktop/Outlook Folder Extractor.command`
+- Windows: Desktop shortcut `Outlook Folder Extractor.lnk`
+
 ### 4. Manual launch alternative
 
 ```bash
@@ -104,6 +108,15 @@ cd electron-outlook
 npm install
 npm start
 ```
+
+### 5. Packaging outputs
+
+Installer and packaging commands write their output to the [`electron-outlook/dist/`](electron-outlook/dist) folder.
+
+Common commands:
+- [`npm run build`](electron-outlook/package.json:7) compiles TypeScript into [`electron-outlook/dist/`](electron-outlook/dist) runtime files
+- [`npm run pack:mac`](electron-outlook/package.json:10) creates macOS installer output such as a `.dmg`
+- [`npm run pack:win`](electron-outlook/package.json:11) creates Windows installer output such as an NSIS `.exe`
 
 When the app starts successfully, the **Outlook Folder Extractor** desktop window opens and you can click **Connect to Microsoft**.
 

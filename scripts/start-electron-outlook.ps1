@@ -4,6 +4,33 @@
 Set-StrictMode -Version Latest
 $ErrorActionPreference = "Stop"
 
+function New-DesktopShortcut {
+    param(
+        [string]$RootDir,
+        [string]$ScriptPath
+    )
+
+    $DesktopDir = [Environment]::GetFolderPath("Desktop")
+    if (-not $DesktopDir -or -not (Test-Path $DesktopDir)) {
+        return
+    }
+
+    $ShortcutPath = Join-Path $DesktopDir "Outlook Folder Extractor.lnk"
+    if (Test-Path $ShortcutPath) {
+        return
+    }
+
+    $WshShell = New-Object -ComObject WScript.Shell
+    $Shortcut = $WshShell.CreateShortcut($ShortcutPath)
+    $Shortcut.TargetPath = "powershell.exe"
+    $Shortcut.Arguments = "-ExecutionPolicy Bypass -File `"$ScriptPath`""
+    $Shortcut.WorkingDirectory = $RootDir
+    $Shortcut.IconLocation = "$env:SystemRoot\System32\shell32.dll,220"
+    $Shortcut.Save()
+
+    Write-Host "🖥️  Created desktop shortcut: $ShortcutPath" -ForegroundColor Yellow
+}
+
 # ── Resolve paths ──────────────────────────────────────────────────────────────
 $ScriptDir = Split-Path -Parent $MyInvocation.MyCommand.Definition
 $RootDir   = Split-Path -Parent $ScriptDir
@@ -12,6 +39,7 @@ $OutputDir = Join-Path $AppDir  "output"
 $LogFile   = Join-Path $OutputDir "electron-outlook.log"
 
 New-Item -ItemType Directory -Force -Path $OutputDir | Out-Null
+New-DesktopShortcut -RootDir $RootDir -ScriptPath (Join-Path $RootDir "scripts\start-electron-outlook.ps1")
 
 # ── Check Node.js ──────────────────────────────────────────────────────────────
 if (-not (Get-Command node -ErrorAction SilentlyContinue)) {
@@ -39,26 +67,21 @@ if (-not (Test-Path $EnvFile)) {
 # ── Install npm dependencies ───────────────────────────────────────────────────
 $NodeModules = Join-Path $AppDir "node_modules"
 if (-not (Test-Path $NodeModules)) {
-    Write-Host "📦  Installing npm dependencies…" -ForegroundColor Cyan
-    Push-Location $AppDir
-    npm install
-    Pop-Location
-    Write-Host "✅  Dependencies installed." -ForegroundColor Green
+    Write-Host "📦  Installing npm dependencies (first run)…" -ForegroundColor Cyan
 } else {
-    Write-Host "✅  node_modules already present — skipping install." -ForegroundColor Green
+    Write-Host "📦  Installing / verifying npm dependencies…" -ForegroundColor Cyan
 }
+Push-Location $AppDir
+npm install
+Pop-Location
+Write-Host "✅  Dependencies installed." -ForegroundColor Green
 
 # ── Build TypeScript ───────────────────────────────────────────────────────────
-$MainJs = Join-Path $AppDir "dist\main.js"
-if (-not (Test-Path $MainJs)) {
-    Write-Host "🔨  Compiling TypeScript…" -ForegroundColor Cyan
-    Push-Location $AppDir
-    npm run build
-    Pop-Location
-    Write-Host "✅  Build complete." -ForegroundColor Green
-} else {
-    Write-Host "✅  dist\main.js already built — skipping compile." -ForegroundColor Green
-}
+Write-Host "🔨  Compiling TypeScript…" -ForegroundColor Cyan
+Push-Location $AppDir
+npm run build
+Pop-Location
+Write-Host "✅  Build complete." -ForegroundColor Green
 
 # ── Locate Electron binary ─────────────────────────────────────────────────────
 $ElectronBin = Join-Path $AppDir "node_modules\electron\dist\electron.exe"

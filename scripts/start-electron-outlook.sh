@@ -2,12 +2,34 @@
 # start-electron-outlook.sh — Build and launch the Outlook Folder Extractor
 set -euo pipefail
 
+create_desktop_launcher() {
+    local desktop_dir="$HOME/Desktop"
+    local launcher_path="$desktop_dir/Outlook Folder Extractor.command"
+    local launcher_target="$SCRIPT_DIR/scripts/start-electron-outlook.sh"
+
+    if [ ! -d "$desktop_dir" ]; then
+        return
+    fi
+    if [ -f "$launcher_path" ]; then
+        return
+    fi
+
+    cat > "$launcher_path" <<EOF
+#!/usr/bin/env bash
+cd "$SCRIPT_DIR"
+bash "$launcher_target"
+EOF
+    chmod +x "$launcher_path"
+    echo "🖥️   Created desktop launcher: $launcher_path"
+}
+
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")/.." && pwd)"
 APP_DIR="$SCRIPT_DIR/electron-outlook"
 LOG_FILE="$APP_DIR/output/electron-outlook.log"
 PID_FILE="$APP_DIR/output/electron-outlook.pid"
 
 mkdir -p "$APP_DIR/output"
+create_desktop_launcher
 
 # ── Guard: already running? ────────────────────────────────────────────────────
 if [ -f "$PID_FILE" ]; then
