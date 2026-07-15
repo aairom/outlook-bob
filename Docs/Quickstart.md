@@ -172,6 +172,25 @@ After installation:
 - macOS users can open the app from **Applications**, **Launchpad**, or the **Dock**
 - Windows users can open it from the **Desktop shortcut** or the **Start Menu**
 
+### Getting updates after a `git pull`
+
+How you receive updates depends on how you run the app:
+
+| How you run the app | After `git pull` | What to do |
+|---|---|---|
+| `bash scripts/start-electron-outlook.sh` | ✅ Auto-rebuilds | Nothing — the script runs `npm install` + `npm run build` on every launch |
+| `npm start` | ✅ Auto-rebuilds | Nothing — TypeScript is compiled on every start |
+| Installed `.app` from `.dmg` | ❌ Not updated automatically | Download the new `.dmg` from GitHub Releases and reinstall |
+
+#### Updating an installed `.app`
+
+1. Go to the repository's **[Releases](https://github.com/aairom/outlook-bob/releases)** tab.
+2. Open the latest `build-*` pre-release.
+3. Download the `.dmg` and open it.
+4. Drag **Outlook Folder Extractor** into **Applications** — macOS replaces the old version.
+
+> A new `.dmg` is published automatically on every push to `main` that changes the source — you always find the latest build in the Releases tab.
+
 ---
 
 ## 5. Using the app
