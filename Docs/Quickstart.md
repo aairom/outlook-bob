@@ -129,9 +129,21 @@ After launch:
 
 ### Installer build and usage
 
-If you want to distribute the app to non-technical users, you can build installers instead of asking them to run scripts.
+#### Option A — Download a pre-built installer (recommended)
 
-From the project root:
+Every push to `main` automatically builds and publishes a fresh macOS installer via GitHub Actions.
+No local build tools required.
+
+1. Go to the repository's **Releases** tab on GitHub.
+2. Open the latest `build-*` pre-release.
+3. Download the `.dmg` file attached to the release.
+4. Open the `.dmg`, drag **Outlook Folder Extractor** into **Applications**.
+
+> The workflow runs on every push that changes the Electron source — you always find the latest build in Releases.
+
+#### Option B — Build locally
+
+If you need to build the installer yourself:
 
 **macOS installer build:**
 ```bash

@@ -203,6 +203,33 @@ output/recipients_20250625_143022.zip    ← ZIP of any of the above (when ZIP o
 >
 > **State reset:** all UI options (format, fields, filters, date, ZIP toggle) are reset to defaults on every app launch.
 
+## CI / CD — Automated builds
+
+Every push to `main` that modifies the Electron source automatically triggers a GitHub Actions workflow ([`.github/workflows/build-mac.yml`](.github/workflows/build-mac.yml)) that:
+
+1. Compiles TypeScript
+2. Packages a macOS `arm64` `.app` + `.dmg` via `electron-builder`
+3. Uploads the `.dmg` as a **workflow artifact** (kept 30 days)
+4. Creates a **GitHub Release** pre-tagged `build-<short-sha>` with the `.dmg` attached
+
+```mermaid
+flowchart LR
+    A[git push to main] -->|paths filter| B[GitHub Actions\nmacos-latest]
+    B --> C[npm ci]
+    C --> D[npm run pack:mac]
+    D --> E[dist/*.dmg]
+    E --> F[Workflow artifact\n30-day retention]
+    E --> G[GitHub Release\nbuild-SHA]
+```
+
+**Triggered by changes to:**
+- `electron-outlook/src/**`
+- `electron-outlook/package.json` · `package-lock.json` · `tsconfig.json`
+- `.github/workflows/build-mac.yml`
+
+**Download the latest build:**
+Go to the [**Releases**](../../releases) tab and download the `.dmg` from the most recent `build-*` pre-release.
+
 ## Scripts
 
 | Script | Purpose |
