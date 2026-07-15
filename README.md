@@ -13,8 +13,10 @@ flowchart TD
     D --> E[Load Folders\nGET /me/mailFolders recursive]
     E --> F[Folder tree rendered\nwith checkboxes + item counts]
     F --> G[User selects folders\n+ export format + field options\n+ filters + save attachments toggle\n+ ZIP toggle]
-    G --> H[Run Extraction\nGET messages per folder, paginated\nPrefer: IdType='ImmutableId']
-    H --> I{Export format}
+    G --> H{Format chosen}
+    H -- Preview --> P[👁 Preview Emails\nGET messages, no file written\nup to 200 on-screen]
+    H -- Export --> EX[Run Extraction\nGET messages per folder, paginated\nPrefer: IdType='ImmutableId']
+    EX --> I{Export format}
     I -- Recipients CSV --> J1[Unique addresses deduplicated\noutput/recipients_TIMESTAMP.csv]
     I -- Emails CSV --> J2[One row per message\noutput/emails_TIMESTAMP.csv]
     I -- EML Files --> J3[One .eml per message\noutput/eml_export_TIMESTAMP/]
@@ -36,6 +38,7 @@ flowchart TD
 | **EML Files** | One `.eml` file per message, organised by folder, with export headers | Archive / import into another mail client |
 | **JSON** | Structured array of message objects, plus Outlook identifiers | Data processing / scripting |
 | **SQLite** | Persistent `output/emails.sqlite` — idempotent upsert, re-run safe, with Outlook identifiers | Queryable store, incremental syncs |
+| **Preview** | No file written — emails shown on-screen with reading pane + live search | Browse & search messages without exporting |
 
 ## Field Options (CSV / JSON / SQLite / EML)
 
@@ -66,10 +69,11 @@ The app includes a **Monday.com Boards** card at the bottom of the window. Click
 | Control | Effect |
 |---|---|
 | "Exclude addresses containing" | Skips addresses containing the given substring (default: `.ibm.com`) |
-| 🚩 "Flagged emails only" | Exports only flagged/follow-up messages; combines with every format |
-| 📎 "Also save attachment files to disk" | Saves binary attachment files to `output/attachments_TIMESTAMP/<Folder>/`; combinable with every format; file type filterable (PDF, Word, PowerPoint, Excel, Images) |
-| "Scan emails since" | Restricts to messages on or after the chosen date |
-| 📦 "Compress output as ZIP file" | Compresses the primary export (file or directory) into a `.zip` archive after export; original is removed |
+| 🚩 "Flagged emails only" | Filters flagged/follow-up messages; applies to Preview and all export formats |
+| 📎 "Also save attachment files to disk" | Saves binary attachment files to `output/attachments_TIMESTAMP/<Folder>/`; combinable with every export format; file type filterable (PDF, Word, PowerPoint, Excel, Images) |
+| "Scan emails since" | Restricts to messages on or after the chosen date; applies to Preview and all export formats |
+| 📦 "Compress output as ZIP file" | Compresses the primary export into a `.zip` archive; original is removed (hidden in Preview mode) |
+| "👁 Load up to N emails" | Preview mode only — caps messages fetched for on-screen display (50 / 100 / 200) |
 
 > All options reset to their defaults on every app launch — no state is remembered between sessions.
 

@@ -279,11 +279,16 @@ async function authenticateInteractive(onProgress: (msg: string) => void): Promi
 
 // ── Graph API helpers ─────────────────────────────────────────────────────────
 async function graphGet(token: string, url: string): Promise<unknown> {
-  return JSON.parse(await httpsGet(url, {
+  const data = JSON.parse(await httpsGet(url, {
     Authorization: `Bearer ${token}`,
     Accept: "application/json",
     Prefer: 'IdType="ImmutableId"',
-  }));
+  })) as Record<string, unknown>;
+  if (data["error"]) {
+    const err = data["error"] as Record<string, unknown>;
+    throw new Error(`Graph API error: ${err["code"]} — ${err["message"]}`);
+  }
+  return data;
 }
 
 // ── Build $select field list from export params ───────────────────────────────
@@ -350,11 +355,13 @@ async function listFoldersRecursive(token: string, parentId?: string): Promise<M
 
 // ── Iterate messages in a folder ──────────────────────────────────────────────
 async function* iterFolderMessages(
-  token: string, folderId: string, since: string | undefined, selectFields: string
+  token: string, folderId: string, since: string | undefined, selectFields: string,
+  orderBy = true
 ): AsyncGenerator<Record<string, unknown>> {
   let url: string | null =
     `${GRAPH_BASE}/me/mailFolders/${folderId}/messages` +
-    `?$select=${encodeURIComponent(selectFields)}&$top=50&$orderby=sentDateTime%20desc` +
+    `?$select=${encodeURIComponent(selectFields)}&$top=50` +
+    (orderBy ? `&$orderby=sentDateTime%20desc` : "") +
     (since ? `&$filter=sentDateTime%20ge%20${encodeURIComponent(since + "T00:00:00Z")}` : "");
   while (url) {
     const data = (await graphGet(token, url)) as Record<string, unknown>;
@@ -1091,6 +1098,69 @@ ipcMain.handle("start-extraction", async (
     send("error", { message: err instanceof Error ? err.message : String(err) });
   }
 });
+
+// ── Preview emails (return messages as objects for on-screen display) ─────────
+ipcMain.handle("preview-emails", async (
+  _event,
+  args: { folderIds: string[]; folderTree: MailFolder[]; since?: string; limit?: number; flaggedOnly?: boolean }
+) => {
+  const onProgress = (msg: string) => send("progress", { message: msg });
+  try {
+    let token = await getAccessTokenSilent();
+    if (!token) token = await authenticateInteractive(onProgress);
+
+    const allFolders: MailFolder[] = [];
+    function flatten(nodes: MailFolder[]): void {
+      for (const n of nodes) { allFolders.push(n); if (n.children) flatten(n.children); }
+    }
+    flatten(args.folderTree);
+    const selected = allFolders.filter((f) => args.folderIds.includes(f.id));
+    if (selected.length === 0) return { messages: [], error: "No folders selected." };
+
+    const limit = args.limit ?? 100;
+    const selectFields = "id,sentDateTime,from,toRecipients,ccRecipients,subject,body,hasAttachments,flag,isRead,importance";
+    const messages: Array<Record<string, unknown>> = [];
+
+    for (const folder of selected) {
+      onProgress(`📁 Loading ${folder.displayName}…`);
+      for await (const msg of iterFolderMessages(token, folder.id, args.since, selectFields, false)) {
+        if (args.flaggedOnly) {
+          const flagStatus = ((msg["flag"] as Record<string,string>|undefined)?.["flagStatus"]) ?? "";
+          if (flagStatus !== "flagged") continue;
+        }
+        const fromEa = ((msg["from"] as Record<string,unknown>|undefined)?.["emailAddress"] as Record<string,string>|undefined) ?? {};
+        const bodyObj = msg["body"] as Record<string,string>|undefined;
+        const isHtml  = bodyObj?.["contentType"] === "html";
+        const bodyRaw = bodyObj?.["content"] ?? "";
+        const bodyText = isHtml
+          ? bodyRaw.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim()
+          : bodyRaw;
+        messages.push({
+          id:             msg["id"],
+          sentDateTime:   msg["sentDateTime"],
+          from:           fromEa["address"] ?? "",
+          fromName:       fromEa["name"] ?? "",
+          to:             recipientListStr((msg["toRecipients"] as Array<Record<string,unknown>>|undefined) ?? []),
+          subject:        String(msg["subject"] ?? "(no subject)"),
+          bodyText,
+          bodyHtml:       isHtml ? bodyRaw : "",
+          isRead:         msg["isRead"] ?? true,
+          isFlagged:      ((msg["flag"] as Record<string,string>|undefined)?.["flagStatus"]) === "flagged",
+          importance:     String(msg["importance"] ?? "normal"),
+          hasAttachments: msg["hasAttachments"] ?? false,
+          folder:         folder.displayName,
+        });
+        if (messages.length >= limit) break;
+      }
+      if (messages.length >= limit) break;
+    }
+    onProgress(`✅ Loaded ${messages.length} message(s).`);
+    return { messages };
+  } catch (err) {
+    return { messages: [], error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
 
 ipcMain.handle("open-file", async (_event, args: { path: string }) => {
   if (args.path.startsWith("http://") || args.path.startsWith("https://")) {

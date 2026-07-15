@@ -231,6 +231,7 @@ and renders it with item counts and expand/collapse controls.
 | **EML Files** | One `.eml` file per message, organised by folder, with export headers | Timestamped directory |
 | **JSON** | Structured array of message objects plus Outlook identifiers | Timestamped file |
 | **SQLite** | Persistent `output/emails.sqlite` database with Outlook identifiers | **Not timestamped** — re-run safe (no duplicates) |
+| **Preview** | Emails displayed on-screen — no file written | Click **👁 Preview Emails** instead of Run Extraction |
 
 > **SQLite is idempotent.** Records are upserted on `message_id` — re-running adds
 > new messages and refreshes existing ones without ever creating duplicates.
@@ -257,8 +258,8 @@ The **"Exclude addresses containing"** field pre-fills from `EXCLUDED_DOMAIN` in
 Edit it directly in the UI, or uncheck the box to disable filtering entirely.
 
 ### Step 6 — (Optional) Flagged emails only
-Check **"🚩 Flagged emails only"** to restrict the extraction to messages flagged/marked
-for follow-up in Outlook. Combines with all other filters and export formats.
+Check **"🚩 Flagged emails only"** to restrict to messages flagged/marked for follow-up
+in Outlook. Applies to all export formats and to **Preview** mode.
 
 ### Step 7 — (Optional) Also save attachment files to disk
 Check **"📎 Also save attachment files to disk"** to save every attached file to
@@ -291,11 +292,12 @@ When this toggle is checked, a **file-type picker** appears:
 
 ### Step 8 — (Optional) Date filter
 Enter a **"Scan emails since"** date to limit the scan to messages on or after that date.
+Applies to all export formats and to **Preview** mode.
 
 ### Step 9 — (Optional) Compress output as ZIP
 Check **"📦 Compress output as ZIP file"** (located in the run card, just above the
 Run button) to automatically compress the primary export into a `.zip` archive after
-extraction completes.
+extraction completes. This option is hidden when **Preview** format is selected (no file is written).
 
 | Behaviour | Detail |
 |---|---|
@@ -321,8 +323,19 @@ Each board row shows:
 > This step is independent of the email extraction — no Microsoft sign-in is required
 > to use it. If the Monday token is missing, an error is displayed inline.
 
+### Step 9b — (Preview only) Set the message limit
+When **Preview** format is selected, a **"👁 Load up to N emails"** selector appears
+(50 / 100 / 200). Choose how many messages to fetch before clicking **👁 Preview Emails**.
+
+The preview card shows:
+- A scrollable email list (sender, date, subject, body snippet, 🚩📎❗ badges)
+- A live search bar that filters by subject, sender, or body text
+- A reading pane that opens when you click any row (From, To, Date, Folder, full body)
+
+No file is written to disk when using Preview.
+
 ### Step 11 — Run
-Click **"Run Extraction"**. The progress log shows live updates:
+Click **"Run Extraction"** (or **"👁 Preview Emails"** in Preview mode). The progress log shows live updates:
 
 ```
 📁 Sent Items…

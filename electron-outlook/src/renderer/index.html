@@ -87,7 +87,7 @@
     /* ── Export format selector ── */
     .format-grid {
       display: grid;
-      grid-template-columns: repeat(5, 1fr);
+      grid-template-columns: repeat(3, 1fr);
       gap: 8px;
       margin-bottom: 18px;
     }
@@ -183,6 +183,59 @@
     /* "All" chip uses accent colour */
     .att-type-chip.all-chip.on { border-color: #a6e3a1; background: #1a2e1a; color: #a6e3a1; }
     .att-type-chip.all-chip.on .chip-dot { background: #a6e3a1; }
+
+    /* ── Email Preview Viewer ── */
+    #preview-card { display: none; }
+    #preview-toolbar {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;
+    }
+    #preview-count { font-size: 12px; color: #6c7086; }
+    #preview-search {
+      -webkit-app-region: no-drag;
+      flex: 1; min-width: 180px; padding: 6px 12px; background: #1e1e2e;
+      border: 1px solid #45475a; border-radius: 8px; color: #cdd6f4;
+      font-size: 13px; outline: none;
+    }
+    #preview-search:focus { border-color: #cba6f7; }
+    #preview-search::placeholder { color: #45475a; }
+
+    #preview-list-wrap {
+      background: #1e1e2e; border: 1px solid #45475a; border-radius: 8px;
+      overflow-x: hidden; overflow-y: auto; max-height: 480px;
+    }
+    .email-row {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 10px 12px; border-bottom: 1px solid #313244;
+      cursor: pointer; transition: background 0.1s;
+      -webkit-app-region: no-drag;
+    }
+    .email-row:last-child { border-bottom: none; }
+    .email-row:hover { background: #26263a; }
+    .email-row.selected { background: #2a2040; border-left: 3px solid #cba6f7; padding-left: 9px; }
+    .email-row.unread .email-subject { font-weight: 700; color: #cdd6f4; }
+    .email-meta { flex: 1; min-width: 0; }
+    .email-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
+    .email-from  { font-size: 13px; font-weight: 600; color: #cdd6f4; white-space: nowrap; max-width: 180px; overflow: hidden; text-overflow: ellipsis; }
+    .email-date  { font-size: 11px; color: #6c7086; white-space: nowrap; margin-left: auto; }
+    .email-subject { font-size: 12px; color: #a6adc8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 1px; }
+    .email-preview { font-size: 11px; color: #6c7086; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+    .email-badges { display: flex; gap: 4px; flex-shrink: 0; padding-top: 2px; }
+    .email-badge { font-size: 12px; }
+
+    /* Reading pane */
+    #email-pane {
+      display: none; background: #1e1e2e; border: 1px solid #45475a;
+      border-radius: 8px; padding: 16px; margin-top: 10px;
+    }
+    #email-pane-header { margin-bottom: 12px; border-bottom: 1px solid #45475a; padding-bottom: 12px; }
+    #email-pane-subject { font-size: 15px; font-weight: 700; color: #cdd6f4; margin-bottom: 6px; }
+    .email-pane-meta { font-size: 12px; color: #a6adc8; margin-bottom: 2px; }
+    .email-pane-meta span { color: #cdd6f4; }
+    #email-pane-body {
+      font-size: 13px; color: #a6adc8; white-space: pre-wrap; word-break: break-word;
+      max-height: 380px; overflow-y: auto; line-height: 1.7;
+    }
+    #preview-empty { font-size: 13px; color: #6c7086; padding: 14px 0; text-align: center; display: none; }
 
     /* ── Folder tree ── */
     #folder-card { display: none; }
@@ -384,6 +437,11 @@
         <span class="fmt-name">SQLite</span>
         <span class="fmt-desc">Persistent DB, re-run safe (no duplicates)</span>
       </div>
+      <div class="format-btn" data-format="preview">
+        <span class="fmt-icon">👁</span>
+        <span class="fmt-name">Preview</span>
+        <span class="fmt-desc">Browse emails on‑screen (up to 200)</span>
+      </div>
     </div>
 
     <!-- Field toggles (hidden for recipients-csv) -->
@@ -491,9 +549,47 @@
       </label>
     </div>
 
+    <!-- Preview limit (shown only in Preview mode) -->
+    <div id="preview-limit-row" class="filter-row" style="display:none;">
+      <label for="preview-limit-select" style="-webkit-app-region:no-drag;">
+        👁 Load up to
+      </label>
+      <select id="preview-limit-select" style="-webkit-app-region:no-drag; background:#1e1e2e; border:1px solid #45475a; border-radius:6px; color:#cdd6f4; font-size:12px; padding:4px 8px; outline:none; cursor:pointer;">
+        <option value="50">50 emails</option>
+        <option value="100" selected>100 emails</option>
+        <option value="200">200 emails</option>
+      </select>
+    </div>
+
     <div class="btn-row">
       <button id="btn-extract" disabled>Run Extraction</button>
+      <button id="btn-preview" disabled style="background:#89dceb;color:#1e1e2e;display:none;">👁 Preview Emails</button>
       <button id="btn-open-output">Open Output</button>
+    </div>
+  </div>
+
+  <!-- ── Email Preview card ── -->
+  <div class="card" id="preview-card">
+    <div id="preview-toolbar">
+      <p class="section-title" style="margin:0;">📧 Email Preview</p>
+      <input type="text" id="preview-search" placeholder="Search subject, from, body…" />
+      <span id="preview-count"></span>
+    </div>
+
+    <div id="preview-list-wrap">
+      <div id="preview-empty">No messages to display.</div>
+    </div>
+
+    <!-- Reading pane -->
+    <div id="email-pane">
+      <div id="email-pane-header">
+        <div id="email-pane-subject"></div>
+        <div class="email-pane-meta">From: <span id="email-pane-from"></span></div>
+        <div class="email-pane-meta">To: <span id="email-pane-to"></span></div>
+        <div class="email-pane-meta">Date: <span id="email-pane-date"></span></div>
+        <div class="email-pane-meta">Folder: <span id="email-pane-folder"></span></div>
+      </div>
+      <div id="email-pane-body"></div>
     </div>
   </div>
 
@@ -548,6 +644,7 @@
     const btnSelectAll    = document.getElementById("btn-select-all");
     const btnDeselectAll  = document.getElementById("btn-deselect-all");
     const btnExtract      = document.getElementById("btn-extract");
+    const btnPreview      = document.getElementById("btn-preview");
     const btnOpenOutput   = document.getElementById("btn-open-output");
     const sinceDate       = document.getElementById("since-date");
     const folderCard      = document.getElementById("folder-card");
@@ -584,14 +681,25 @@
     function updateFieldVisibility() {
       const isRecipients = selectedFormat === "recipients-csv";
       const isEml        = selectedFormat === "eml";
-      fieldSection.style.display   = isRecipients ? "none" : "block";
-      emlHint.style.display        = isEml        ? "block" : "none";
-      attTypeSection.style.display = chkSaveAttachments.checked ? "block" : "none";
+      const isPreview    = selectedFormat === "preview";
+      fieldSection.style.display        = (isRecipients || isPreview) ? "none" : "block";
+      emlHint.style.display             = isEml        ? "block" : "none";
+      attTypeSection.style.display      = chkSaveAttachments.checked && !isPreview ? "block" : "none";
+      // ZIP not applicable in preview mode; hide it
+      document.querySelector(".filter-row:has(#chk-zip-output)").style.display = isPreview ? "none" : "flex";
+      document.getElementById("preview-limit-row").style.display = isPreview ? "flex" : "none";
+      // Swap extract / preview buttons
+      btnExtract.style.display = isPreview ? "none" : "inline-block";
+      btnPreview.style.display = isPreview ? "inline-block" : "none";
+      if (isPreview) {
+        const n = getCheckedFolderIds().length;
+        btnPreview.disabled = n === 0;
+      }
     }
 
     // Validate non-recipients/eml/sqlite formats for at least one field
     function requiresFieldSelection(fmt) {
-      return fmt !== "recipients-csv" && fmt !== "eml" && fmt !== "sqlite";
+      return fmt !== "recipients-csv" && fmt !== "eml" && fmt !== "sqlite" && fmt !== "preview";
     }
     updateFieldVisibility();
 
@@ -721,7 +829,11 @@
     function updateSelectedCount() {
       const n = getCheckedFolderIds().length;
       selectedCount.textContent = n;
-      btnExtract.disabled = n === 0;
+      if (selectedFormat === "preview") {
+        btnPreview.disabled = n === 0;
+      } else {
+        btnExtract.disabled = n === 0;
+      }
     }
 
     const FOLDER_ICONS = {
@@ -921,6 +1033,157 @@
       if (lastOutputPath) api.openFile(lastOutputPath);
     });
 
+    // ── Preview emails ────────────────────────────────────────────────────────
+    const previewCard      = document.getElementById("preview-card");
+    const previewListWrap  = document.getElementById("preview-list-wrap");
+    const previewEmpty     = document.getElementById("preview-empty");
+    const previewCount     = document.getElementById("preview-count");
+    const previewSearch    = document.getElementById("preview-search");
+    const emailPane        = document.getElementById("email-pane");
+    const emailPaneSubject = document.getElementById("email-pane-subject");
+    const emailPaneFrom    = document.getElementById("email-pane-from");
+    const emailPaneTo      = document.getElementById("email-pane-to");
+    const emailPaneDate    = document.getElementById("email-pane-date");
+    const emailPaneFolder  = document.getElementById("email-pane-folder");
+    const emailPaneBody    = document.getElementById("email-pane-body");
+
+    let allPreviewMessages = [];
+    let selectedEmailId    = null;
+
+    function fmtDate(iso) {
+      if (!iso) return "";
+      const d = new Date(iso);
+      return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) +
+             " " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    }
+
+    function renderEmailList(messages) {
+      // Remove existing rows (keep the empty-state div)
+      previewListWrap.querySelectorAll(".email-row").forEach(r => r.remove());
+
+      if (!messages.length) {
+        previewEmpty.style.display = "block";
+        previewCount.textContent = "";
+        return;
+      }
+      previewEmpty.style.display = "none";
+      previewCount.textContent = messages.length + " message" + (messages.length !== 1 ? "s" : "");
+
+      messages.forEach(msg => {
+        const row = document.createElement("div");
+        row.className = "email-row" + (msg.isRead ? "" : " unread") + (msg.id === selectedEmailId ? " selected" : "");
+        row.dataset.id = msg.id;
+
+        const meta = document.createElement("div");
+        meta.className = "email-meta";
+
+        const top = document.createElement("div");
+        top.className = "email-top";
+        const fromEl = document.createElement("span");
+        fromEl.className = "email-from";
+        fromEl.title = msg.fromName ? `${msg.fromName} <${msg.from}>` : msg.from;
+        fromEl.textContent = msg.fromName || msg.from || "(unknown)";
+        const dateEl = document.createElement("span");
+        dateEl.className = "email-date";
+        dateEl.textContent = fmtDate(msg.sentDateTime);
+        top.append(fromEl, dateEl);
+
+        const subj = document.createElement("div");
+        subj.className = "email-subject";
+        subj.textContent = msg.subject;
+
+        const prev = document.createElement("div");
+        prev.className = "email-preview";
+        prev.textContent = msg.bodyText ? msg.bodyText.slice(0, 120) : "";
+
+        meta.append(top, subj, prev);
+
+        const badges = document.createElement("div");
+        badges.className = "email-badges";
+        if (msg.isFlagged)      { const b = document.createElement("span"); b.className = "email-badge"; b.title = "Flagged"; b.textContent = "🚩"; badges.appendChild(b); }
+        if (msg.hasAttachments) { const b = document.createElement("span"); b.className = "email-badge"; b.title = "Has attachments"; b.textContent = "📎"; badges.appendChild(b); }
+        if (msg.importance === "high") { const b = document.createElement("span"); b.className = "email-badge"; b.title = "High importance"; b.textContent = "❗"; badges.appendChild(b); }
+
+        row.append(meta, badges);
+
+        row.addEventListener("click", () => {
+          previewListWrap.querySelectorAll(".email-row").forEach(r => r.classList.remove("selected"));
+          row.classList.add("selected");
+          selectedEmailId = msg.id;
+          openEmailPane(msg);
+        });
+
+        previewListWrap.appendChild(row);
+      });
+    }
+
+    function openEmailPane(msg) {
+      emailPaneSubject.textContent = msg.subject;
+      emailPaneFrom.textContent    = msg.fromName ? `${msg.fromName} <${msg.from}>` : (msg.from || "—");
+      emailPaneTo.textContent      = msg.to || "—";
+      emailPaneDate.textContent    = fmtDate(msg.sentDateTime);
+      emailPaneFolder.textContent  = msg.folder || "—";
+      emailPaneBody.textContent    = msg.bodyText || "(no body)";
+      emailPane.style.display = "block";
+      emailPane.scrollIntoView({ behavior: "smooth", block: "nearest" });
+    }
+
+    function applyPreviewSearch() {
+      const q = previewSearch.value.toLowerCase();
+      if (!q) { renderEmailList(allPreviewMessages); return; }
+      const filtered = allPreviewMessages.filter(m =>
+        m.subject.toLowerCase().includes(q) ||
+        m.from.toLowerCase().includes(q) ||
+        m.fromName.toLowerCase().includes(q) ||
+        m.bodyText.toLowerCase().includes(q)
+      );
+      renderEmailList(filtered);
+    }
+
+    previewSearch.addEventListener("input", applyPreviewSearch);
+
+    btnPreview.addEventListener("click", async () => {
+      const folderIds = getCheckedFolderIds();
+      if (!folderIds.length) return;
+
+      btnPreview.disabled   = true;
+      btnConnect.disabled   = true;
+      btnLoadFolders.disabled = true;
+      previewCard.style.display  = "block";
+      previewEmpty.style.display = "none";
+      previewListWrap.querySelectorAll(".email-row").forEach(r => r.remove());
+      emailPane.style.display    = "none";
+      previewSearch.value        = "";
+      previewCount.textContent   = "Loading…";
+      clearLog();
+
+      api.removeAllListeners("progress");
+      api.onProgress(msg => appendLog(msg, classifyLine(msg)));
+
+      const limit = parseInt(document.getElementById("preview-limit-select").value, 10);
+      const result = await api.previewEmails({
+        folderIds,
+        folderTree: cachedFolderTree,
+        since: sinceDate.value || undefined,
+        limit,
+        flaggedOnly: document.getElementById("chk-flagged-only").checked,
+      });
+
+      btnPreview.disabled    = false;
+      btnConnect.disabled    = false;
+      btnLoadFolders.disabled = false;
+
+      if (result.error) {
+        appendLog("❌ " + result.error, "err");
+        previewCount.textContent = "";
+        return;
+      }
+
+      allPreviewMessages = result.messages;
+      renderEmailList(allPreviewMessages);
+      previewCard.scrollIntoView({ behavior: "smooth", block: "start" });
+    });
+
     // ── Reset all UI controls to their defined defaults ───────────────────────
     function resetUI() {
       // Format selector → Recipients CSV
@@ -972,6 +1235,18 @@
       resultMsg.className          = "";
       btnOpenOutput.style.display  = "none";
       lastOutputPath               = "";
+
+      // Preview state → hidden / cleared (refs may not exist yet at resetUI boot time)
+      const _previewCard = document.getElementById("preview-card");
+      if (_previewCard) {
+        _previewCard.style.display = "none";
+        document.getElementById("email-pane").style.display = "none";
+        document.getElementById("preview-search").value = "";
+        document.getElementById("preview-count").textContent = "";
+        document.getElementById("preview-list-wrap").querySelectorAll(".email-row").forEach(r => r.remove());
+      }
+      allPreviewMessages = [];
+      selectedEmailId    = null;
 
       updateFieldVisibility();
     }

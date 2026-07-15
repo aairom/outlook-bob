@@ -50,7 +50,7 @@
       "shortcutName": "Outlook Folder Extractor"
     },
     "files": [
-      "dist/**/*",
+      "dist/*.js",
       "src/renderer/**/*",
       "output/.gitkeep"
     ],

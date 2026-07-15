@@ -11,6 +11,9 @@ The app also integrates with **Monday.com**: a dedicated card lets you view all 
 Monday boards (name, workspace, item count, state) by calling the Monday GraphQL API
 directly from the main process using the token stored in `.bob/mcp.json`.
 
+A sixth **Preview** format lets you browse emails directly on-screen (up to 200) without
+writing any file — messages appear in a scrollable list with a reading pane and live search.
+
 All UI state (format selection, field toggles, filters, date, ZIP option) is reset
 to defined defaults on every app launch via an explicit `resetUI()` call in the boot
 sequence — no state is persisted between sessions.
@@ -21,9 +24,9 @@ flowchart TD
     MCPCFG[".bob/mcp.json (project root)\nMonday API token"]
 
     subgraph App["electron-outlook — Electron Desktop App"]
-        MAIN["main.ts\nMain process\nAuth · Graph API · Export logic · ZIP\nMonday GraphQL client"]
+        MAIN["main.ts\nMain process\nAuth · Graph API · Export logic · ZIP\nMonday GraphQL client · Preview handler"]
         PRE["preload.ts\nContext bridge\nIPC channel definitions"]
-        UI["renderer/index.html\nRenderer process\nFolder tree · Export options UI\nMonday Boards card\nresetUI() on every boot"]
+        UI["renderer/index.html\nRenderer process\nFolder tree · Export options UI\nPreview card · Monday Boards card\nresetUI() on every boot"]
     end
 
     subgraph Microsoft["Microsoft Cloud"]
@@ -43,6 +46,7 @@ flowchart TD
         SQLITE["emails.sqlite\nPersistent — idempotent upsert"]
         ZIP["name_TIMESTAMP.zip\nOptional — original removed"]
         CACHE["~/.cache/extract_outlook_token_folder.json\nToken cache"]
+        PREV["Preview — no file written\ndisplayed on-screen only"]
     end
 
     ENV --> MAIN
@@ -53,10 +57,11 @@ flowchart TD
     IDP -->|access_token + refresh_token| MAIN
     MAIN -->|GET /me/mailFolders recursive| GRAPH
     MAIN -->|GET mailFolders + messages paginated\nPrefer: IdType='ImmutableId'| GRAPH
+    MAIN -->|preview-emails: GET messages\nno $orderby, up to 200| GRAPH
     GRAPH -->|JSON| MAIN
     MAIN -->|POST /v2 GraphQL\nboards query| MAPI
     MAPI -->|boards JSON| MAIN
-    MAIN --> CSV1 & CSV2 & JSON & EML & SQLITE
+    MAIN --> CSV1 & CSV2 & JSON & EML & SQLITE & PREV
     CSV1 & CSV2 & JSON & EML & SQLITE -->|zipOutput=true| ZIP
     IDP --> CACHE
 ```
@@ -133,7 +138,8 @@ flowchart TD
 | `get-status` | renderer → main | — | Check if a valid token exists |
 | `connect` | renderer → main | — | Start interactive OAuth flow |
 | `list-folders` | renderer → main | — | Fetch full folder tree recursively |
-| `start-extraction` | renderer → main | `folderIds, folderTree, since?, exportParams` | Run export |
+| `start-extraction` | renderer → main | `folderIds, folderTree, since?, exportParams` | Run export to file |
+| `preview-emails` | renderer → main | `folderIds, folderTree, since?, limit?, flaggedOnly?` | Fetch messages for on-screen display (no file written) |
 | `open-file` | renderer → main | `path` | Open file/folder with OS default app |
 | `list-monday-boards` | renderer → main | — | Fetch all Monday boards via GraphQL API |
 | `progress` | main → renderer | `{ message }` | Live status updates |
@@ -186,6 +192,22 @@ interface MondayBoard {
   workspace:   { id: string; name: string } | null;
 }
 ```
+
+---
+
+## Preview — Design Notes
+
+| Detail | Value |
+|---|---|
+| IPC channel | `preview-emails` |
+| Graph `$select` | `id, sentDateTime, from, toRecipients, ccRecipients, subject, body, hasAttachments, flag, isRead, importance` |
+| `$orderby` | **None** — omitted to avoid Graph API rejection when `body` is in `$select` |
+| Limit | Configurable — 50 / 100 / 200 (default 100) |
+| File output | **None** — messages are returned as JSON to the renderer and rendered in-memory |
+| Reading pane | Plain text only (`bodyText` with HTML stripped) |
+| Live search | Filters by subject, sender name/address, body text |
+| Badges | 🚩 flagged · 📎 has attachments · ❗ high importance |
+| Unread styling | Bold subject line |
 
 ---
 
@@ -312,10 +334,10 @@ Outlook-Bob/
 │   └── stop-electron-outlook.ps1         # Stop gracefully (Windows)
 └── electron-outlook/
     ├── src/
-    │   ├── main.ts                        # Main process — auth, Graph API, export logic, ZIP, Monday GraphQL client
-    │   ├── preload.ts                     # Context bridge — IPC channel definitions + types (incl. MondayBoard)
+    │   ├── main.ts                        # Main process — auth, Graph API, export logic, ZIP, Monday GraphQL client, preview handler
+    │   ├── preload.ts                     # Context bridge — IPC channels + types (MondayBoard, PreviewMessage)
     │   └── renderer/
-    │       └── index.html                 # Full UI — folder tree, export options, Monday Boards card, resetUI()
+    │       └── index.html                 # Full UI — folder tree, 6 format tiles, preview card, Monday Boards card, resetUI()
     ├── package.json
     ├── tsconfig.json
     ├── Quickstart.md                      # App-specific quickstart

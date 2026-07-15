@@ -55,6 +55,22 @@ interface MondayItem {
   column_values: MondayColumnValue[];
 }
 
+interface PreviewMessage {
+  id: string;
+  sentDateTime: string;
+  from: string;
+  fromName: string;
+  to: string;
+  subject: string;
+  bodyText: string;
+  bodyHtml: string;
+  isRead: boolean;
+  isFlagged: boolean;
+  importance: string;
+  hasAttachments: boolean;
+  folder: string;
+}
+
 contextBridge.exposeInMainWorld("electronAPI", {
   // ── Queries ────────────────────────────────────────────────────────────────
   getStatus: (): Promise<{ authenticated: boolean; mondayBaseUrl: string }> =>
@@ -92,6 +108,15 @@ contextBridge.exposeInMainWorld("electronAPI", {
     error?: string;
   }> =>
     ipcRenderer.invoke("create-monday-item", { boardId, itemName }),
+
+  previewEmails: (args: {
+    folderIds: string[];
+    folderTree: MailFolder[];
+    since?: string;
+    limit?: number;
+    flaggedOnly?: boolean;
+  }): Promise<{ messages: PreviewMessage[]; error?: string }> =>
+    ipcRenderer.invoke("preview-emails", args),
 
   // ── Events ─────────────────────────────────────────────────────────────────
   onProgress: (cb: (message: string) => void) => {
