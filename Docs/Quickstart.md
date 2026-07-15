@@ -2,7 +2,8 @@
 
 A native Electron desktop app that connects to your **Microsoft 365 mailbox** via the
 Microsoft Graph API (OAuth 2.0 PKCE — no password stored), lets you pick any folders
-interactively, and exports emails in your preferred format.
+interactively, and exports emails in your preferred format. The app also includes a
+**Monday.com Boards** panel to browse your boards without switching context.
 
 > **Fresh start on every launch** — all options (format, fields, filters, date, ZIP)
 > are reset to their defaults when the app opens. Nothing is remembered between sessions.
@@ -16,9 +17,13 @@ interactively, and exports emails in your preferred format.
 | Node.js 18+ | Build only | `node --version` |
 | npm 9+ | Build only | `npm --version` |
 | Microsoft 365 account | Always | — |
+| Monday.com account | Monday Boards panel only | — |
 
 No Azure App Registration needed — the default `CLIENT_ID` uses Microsoft's public
 Graph Explorer client which works for any Microsoft 365 account.
+
+The Monday Boards panel reads the API token from `.bob/mcp.json` at the project root.
+If the Monday MCP server is already configured in Bob, no extra setup is needed.
 
 ---
 
@@ -159,6 +164,13 @@ After installation:
 
 ## 5. Using the app
 
+### Step 0 — (Optional) Verify Monday token
+
+If you want to use the **Monday.com Boards** panel, confirm `.bob/mcp.json` exists at
+the project root and contains a valid `Authorization` token under
+`mcpServers.monday.headers.Authorization`. If the Monday MCP server is already
+configured in Bob, this file already exists.
+
 ### Step 1 — Connect
 Click **"Connect to Microsoft"**. Your browser opens the Microsoft sign-in page.  
 Sign in with your Outlook / Microsoft 365 account and accept `Mail.Read`.  
@@ -264,7 +276,21 @@ extraction completes.
 > **SQLite + ZIP:** the `.sqlite` file is zipped and then removed. The next non-ZIP
 > SQLite run recreates the database file and upserts all matching records again.
 
-### Step 10 — Run
+### Step 10 — View Monday Boards *(optional)*
+
+Scroll to the **Monday.com Boards** card at the bottom of the window.
+Click **"📋 View My Boards"** to load your boards from the Monday GraphQL API.
+
+Each board row shows:
+- Kind icon: 🌐 public · 🔒 private · 🔗 share
+- Board name and workspace
+- Item count
+- Active / archived state badge
+
+> This step is independent of the email extraction — no Microsoft sign-in is required
+> to use it. If the Monday token is missing, an error is displayed inline.
+
+### Step 11 — Run
 Click **"Run Extraction"**. The progress log shows live updates:
 
 ```
@@ -390,6 +416,8 @@ Remove-Item "$env:USERPROFILE\.cache\extract_outlook_token_folder.json" -ErrorAc
 | No output produced | Check the domain filter — it may be excluding all messages; try unchecking it |
 | SQLite DB not updated | Verify `output/emails.sqlite` is not locked by another process |
 | ZIP file not created | Check the progress log for compression errors; ensure disk space is available |
+| Monday Boards shows error | Check `.bob/mcp.json` — ensure `mcpServers.monday.headers.Authorization` is set and the token is valid |
+| Monday Boards shows "No boards returned" | Token may be expired or have insufficient permissions — regenerate it in your Monday account settings |
 
 ---
 

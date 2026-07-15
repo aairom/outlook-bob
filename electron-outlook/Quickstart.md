@@ -2,7 +2,8 @@
 
 A native desktop app that connects to your **Microsoft 365 mailbox**, lets you pick
 any folders interactively, and exports emails in your preferred format via the
-Microsoft Graph API (OAuth 2.0 PKCE — no password stored).
+Microsoft Graph API (OAuth 2.0 PKCE — no password stored). A **Monday.com Boards**
+panel is also available to browse your boards directly from the app.
 
 > **All options reset to defaults on every launch** — format, fields, filters, date,
 > and ZIP toggle are always cleared when the app opens. Nothing is remembered between sessions.
@@ -58,6 +59,7 @@ rm ~/.cache/extract_outlook_token_folder.json
 9. **Date filter** *(optional)* — limit scan to emails since a given date
 10. **ZIP output** *(optional)* — check "📦 Compress output as ZIP file" (in the run card, above the Run button) to compress the result; original file/directory is removed after ZIP is created
 11. **Run Extraction** — live progress log; click **Open Output** when done
+12. **View Monday Boards** *(optional, independent)* — scroll to the **Monday.com Boards** card and click **📋 View My Boards**; requires a valid Monday API token in `.bob/mcp.json`
 
 ---
 

@@ -27,6 +27,34 @@ export interface ExportParams {
   zipOutput:              boolean;
 }
 
+interface MondayBoard {
+  id: string;
+  name: string;
+  description: string | null;
+  board_kind: string;
+  state: string;
+  items_count: number;
+  workspace: { id: string; name: string } | null;
+  columns: Array<{ id: string; title: string; type: string }>;
+}
+
+interface MondayColumnValue {
+  id: string;
+  type: string;
+  text: string;
+  label?: string;
+  index?: number;
+  date?: string;
+}
+
+interface MondayItem {
+  id: string;
+  name: string;
+  state: string;
+  relative_link: string;
+  column_values: MondayColumnValue[];
+}
+
 contextBridge.exposeInMainWorld("electronAPI", {
   // ── Queries ────────────────────────────────────────────────────────────────
   getStatus: (): Promise<{ authenticated: boolean }> =>
@@ -49,6 +77,22 @@ contextBridge.exposeInMainWorld("electronAPI", {
   openFile: (filePath: string): Promise<void> =>
     ipcRenderer.invoke("open-file", { path: filePath }),
 
+  listMondayBoards: (): Promise<{ boards: MondayBoard[] }> =>
+    ipcRenderer.invoke("list-monday-boards"),
+
+  getMondayBoardItems: (boardId: string): Promise<{
+    columns: Array<{ id: string; title: string; type: string }>;
+    items: MondayItem[];
+    error?: string;
+  }> =>
+    ipcRenderer.invoke("get-monday-board-items", { boardId }),
+
+  createMondayItem: (boardId: string, itemName: string): Promise<{
+    item: { id: string; name: string } | null;
+    error?: string;
+  }> =>
+    ipcRenderer.invoke("create-monday-item", { boardId, itemName }),
+
   // ── Events ─────────────────────────────────────────────────────────────────
   onProgress: (cb: (message: string) => void) => {
     ipcRenderer.on("progress", (_e, payload: { message: string }) => cb(payload.message));
@@ -62,6 +106,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   onError: (cb: (message: string) => void) => {
     ipcRenderer.on("error", (_e, payload: { message: string }) => cb(payload.message));
+  },
+
+  onMondayError: (cb: (message: string) => void) => {
+    ipcRenderer.on("monday-error", (_e, payload: { message: string }) => cb(payload.message));
   },
 
   removeAllListeners: (channel: string) => {

@@ -1,6 +1,6 @@
 # Outlook Folder Extractor
 
-A native Electron desktop app that connects to your **Microsoft 365 mailbox** via the Graph API (OAuth 2.0 PKCE — no password stored), lets you pick any folders interactively, and exports your emails in your chosen format.
+A native Electron desktop app that connects to your **Microsoft 365 mailbox** via the Graph API (OAuth 2.0 PKCE — no password stored), lets you pick any folders interactively, and exports your emails in your chosen format. The app also integrates with **Monday.com** — you can browse your boards directly from the app sidebar using your Monday API token.
 
 ## Architecture
 
@@ -22,6 +22,9 @@ flowchart TD
     I -- SQLite --> J5[Persistent DB — idempotent upsert\noutput/emails.sqlite]
     J1 & J2 & J3 & J4 & J5 -->|saveAttachments=true| J6[Attachment files by folder\noutput/attachments_TIMESTAMP/FolderName/]
     J1 & J2 & J3 & J4 & J5 -->|zipOutput=true| J7[ZIP archive\noutput/name_TIMESTAMP.zip\noriginal removed]
+
+    M([View My Boards]) --> MON[Monday.com API\napi.monday.com/v2\ntoken from .bob/mcp.json]
+    MON --> MB[Board list rendered\nname · workspace · item count · state]
 ```
 
 ## Export Formats
@@ -42,6 +45,22 @@ Toggle which fields to include per message:
 
 > Body (plain text) strips HTML tags automatically — Microsoft Graph always returns HTML, so both toggles always produce content regardless of the original email format.
 
+## Monday.com Integration
+
+The app includes a **Monday.com Boards** card at the bottom of the window. Click **📋 View My Boards** to fetch and display all your Monday boards without leaving the app.
+
+| Field shown | Source |
+|---|---|
+| Board name | Monday GraphQL `boards.name` |
+| Workspace | `boards.workspace.name` |
+| Item count | `boards.items_count` |
+| Status badge | `boards.state` (Active / other) |
+| Kind icon | 🌐 public · 🔒 private · 🔗 share |
+
+**Token configuration:** the app reads the Monday API token automatically from `.bob/mcp.json` (the same token used by the Monday MCP server). No additional setup is needed if the MCP is already configured.
+
+> If the token is not found or is invalid, an error message is shown inline in the card.
+
 ## Filters & Options
 
 | Control | Effect |
@@ -61,8 +80,11 @@ Toggle which fields to include per message:
 | Node.js 18+ | Build only | `node --version` |
 | npm 9+ | Build only | `npm --version` |
 | Microsoft 365 account | Always | — |
+| Monday.com account | Monday Boards feature only | — |
 
 No Azure App Registration needed — uses Microsoft's public Graph Explorer client by default.
+
+The Monday.com integration requires a valid API token in `.bob/mcp.json`. If the Monday MCP server is already configured, no extra steps are needed.
 
 ## Quickstart
 
@@ -132,6 +154,26 @@ Copy `.env.example` to `.env` at the project root. All fields are optional — d
 | `EXCLUDED_DOMAIN` | `.ibm.com` | Default domain to pre-fill in the "Exclude addresses" field (can be changed in the UI) |
 | `REDIRECT_URI` | `http://localhost:8765` | OAuth callback URI (must match Azure registration if using your own) |
 | `LOGIN_HINT` | _(empty)_ | Microsoft account email to pre-select at sign-in |
+
+### Monday.com token (`.bob/mcp.json`)
+
+The Monday API token is read from `.bob/mcp.json` at the project root — the same file used by the Monday MCP server in Bob:
+
+```json
+{
+  "mcpServers": {
+    "monday": {
+      "type": "sse",
+      "url": "https://mcp.monday.com/sse",
+      "headers": {
+        "Authorization": "<your-monday-api-token>"
+      }
+    }
+  }
+}
+```
+
+The app searches for this file relative to its runtime location. If the token is absent or the file does not exist, the **View My Boards** button shows an error and no data is fetched.
 
 ## Output
 

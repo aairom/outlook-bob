@@ -232,6 +232,88 @@
     #result-msg { margin-top: 10px; font-size: 13px; display: none; }
     #result-msg.ok  { color: #a6e3a1; }
     #result-msg.err { color: #f38ba8; }
+
+    /* ── Monday Boards ── */
+    #monday-card { margin-top: 4px; }
+    #btn-monday-boards { background: #f9e2af; color: #1e1e2e; }
+    #monday-boards-list {
+      background: #1e1e2e; border: 1px solid #45475a; border-radius: 8px;
+      padding: 10px 12px; max-height: 340px; overflow-y: auto;
+      margin-top: 10px; display: none;
+    }
+    .monday-board-row {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 8px 6px; border-bottom: 1px solid #313244; cursor: pointer;
+      border-radius: 6px; transition: background 0.12s;
+    }
+    .monday-board-row:last-child { border-bottom: none; }
+    .monday-board-row:hover { background: #26263a; }
+    .monday-board-row.selected { background: #2a2040; border-left: 3px solid #cba6f7; padding-left: 3px; }
+    .monday-board-icon { font-size: 18px; flex-shrink: 0; margin-top: 2px; }
+    .monday-board-info { flex: 1; min-width: 0; }
+    .monday-board-name { font-size: 13px; font-weight: 600; color: #cdd6f4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .monday-board-meta { font-size: 11px; color: #6c7086; margin-top: 2px; }
+    .monday-board-badge {
+      font-size: 10px; padding: 2px 7px; border-radius: 999px;
+      background: #313244; color: #a6adc8; white-space: nowrap; flex-shrink: 0; margin-top: 3px;
+    }
+    .monday-board-badge.active { background: #1e3a2f; color: #a6e3a1; }
+    #monday-status { font-size: 12px; color: #89b4fa; margin-top: 8px; display: none; }
+    #monday-error  { font-size: 12px; color: #f38ba8; margin-top: 8px; display: none; }
+
+    /* ── Monday Items panel ── */
+    #monday-items-card { display: none; }
+    #monday-items-header {
+      display: flex; align-items: center; gap: 10px; margin-bottom: 12px;
+    }
+    #monday-items-title { font-size: 14px; font-weight: 600; color: #cdd6f4; flex: 1; }
+    #monday-items-count { font-size: 11px; color: #6c7086; }
+    #monday-items-loading { font-size: 13px; color: #89b4fa; padding: 8px 0; display: none; }
+    #monday-items-error  { font-size: 12px; color: #f38ba8; margin-top: 6px; display: none; }
+
+    /* Items table */
+    #monday-items-wrap {
+      background: #1e1e2e; border: 1px solid #45475a; border-radius: 8px;
+      overflow: hidden; display: none;
+    }
+    .monday-table {
+      width: 100%; border-collapse: collapse; font-size: 12px;
+    }
+    .monday-table th {
+      background: #26263a; color: #6c7086; font-weight: 600; text-transform: uppercase;
+      font-size: 10px; letter-spacing: 0.06em; padding: 8px 10px; text-align: left;
+      border-bottom: 1px solid #45475a; white-space: nowrap;
+    }
+    .monday-table td {
+      padding: 8px 10px; border-bottom: 1px solid #313244; color: #cdd6f4;
+      vertical-align: top;
+    }
+    .monday-table tr:last-child td { border-bottom: none; }
+    .monday-table tr:hover td { background: #26263a; }
+    .monday-status-chip {
+      display: inline-block; padding: 2px 8px; border-radius: 999px; font-size: 11px;
+      background: #313244; color: #a6adc8;
+    }
+    .monday-status-chip.done    { background: #1e3a2f; color: #a6e3a1; }
+    .monday-status-chip.working { background: #1e2a3a; color: #89b4fa; }
+    .monday-status-chip.stuck   { background: #3a1e1e; color: #f38ba8; }
+    .monday-item-link { color: #89b4fa; text-decoration: none; font-size: 11px; }
+    .monday-item-link:hover { text-decoration: underline; }
+
+    /* Add item form */
+    #monday-add-item-form {
+      display: flex; gap: 8px; margin-top: 12px; align-items: center; flex-wrap: wrap;
+    }
+    #monday-new-item-name {
+      flex: 1; min-width: 180px; padding: 8px 12px; background: #1e1e2e;
+      border: 1px solid #45475a; border-radius: 8px; color: #cdd6f4;
+      font-size: 13px; outline: none;
+    }
+    #monday-new-item-name:focus { border-color: #cba6f7; }
+    #btn-add-monday-item { background: #cba6f7; color: #1e1e2e; }
+    #monday-add-result { font-size: 12px; margin-top: 6px; display: none; width: 100%; }
+    #monday-add-result.ok  { color: #a6e3a1; }
+    #monday-add-result.err { color: #f38ba8; }
   </style>
 </head>
 <body>
@@ -412,6 +494,39 @@
     <div class="btn-row">
       <button id="btn-extract" disabled>Run Extraction</button>
       <button id="btn-open-output">Open Output</button>
+    </div>
+  </div>
+
+  <!-- ── Monday Boards card ── -->
+  <div class="card" id="monday-card">
+    <p class="section-title">Monday.com Boards</p>
+    <div class="btn-row" style="margin-top:0;">
+      <button id="btn-monday-boards">📋 View My Boards</button>
+    </div>
+    <div id="monday-status">Loading boards…</div>
+    <div id="monday-error"></div>
+    <div id="monday-boards-list"></div>
+  </div>
+
+  <!-- ── Monday Items card (shown when a board is selected) ── -->
+  <div class="card" id="monday-items-card">
+    <div id="monday-items-header">
+      <span id="monday-items-title">Board Items</span>
+      <span id="monday-items-count"></span>
+    </div>
+    <div id="monday-items-loading">Loading items…</div>
+    <div id="monday-items-error"></div>
+    <div id="monday-items-wrap">
+      <table class="monday-table">
+        <thead id="monday-items-thead"><tr></tr></thead>
+        <tbody id="monday-items-tbody"></tbody>
+      </table>
+    </div>
+    <!-- Add item form -->
+    <div id="monday-add-item-form">
+      <input type="text" id="monday-new-item-name" placeholder="New item name…" />
+      <button id="btn-add-monday-item">＋ Add Item</button>
+      <div id="monday-add-result"></div>
     </div>
   </div>
 
@@ -860,6 +975,287 @@
 
       updateFieldVisibility();
     }
+
+    // ── Monday Boards ─────────────────────────────────────────────────────────
+    const btnMondayBoards    = document.getElementById("btn-monday-boards");
+    const mondayBoardsList   = document.getElementById("monday-boards-list");
+    const mondayStatus       = document.getElementById("monday-status");
+    const mondayError        = document.getElementById("monday-error");
+    const mondayItemsCard    = document.getElementById("monday-items-card");
+    const mondayItemsTitle   = document.getElementById("monday-items-title");
+    const mondayItemsCount   = document.getElementById("monday-items-count");
+    const mondayItemsLoading = document.getElementById("monday-items-loading");
+    const mondayItemsError   = document.getElementById("monday-items-error");
+    const mondayItemsWrap    = document.getElementById("monday-items-wrap");
+    const mondayItemsThead   = document.getElementById("monday-items-thead").querySelector("tr");
+    const mondayItemsTbody   = document.getElementById("monday-items-tbody");
+    const mondayNewItemName  = document.getElementById("monday-new-item-name");
+    const btnAddMondayItem   = document.getElementById("btn-add-monday-item");
+    const mondayAddResult    = document.getElementById("monday-add-result");
+
+    const BOARD_KIND_ICONS = { public: "🌐", private: "🔒", share: "🔗" };
+    // Monday.com base URL for item links
+    const MONDAY_BASE = "https://ibm.monday.com";
+
+    let selectedBoardId = null;
+
+    // ── Status chip styling ──────────────────────────────────────────────────
+    function statusChipClass(label) {
+      if (!label) return "";
+      const l = label.toLowerCase();
+      if (l === "done" || l === "completed" || l === "closed") return "done";
+      if (l.includes("work") || l.includes("progress") || l.includes("active")) return "working";
+      if (l === "stuck" || l.includes("block") || l.includes("fail")) return "stuck";
+      return "";
+    }
+
+    // ── Render board items table ─────────────────────────────────────────────
+    function renderBoardItems(columns, items, boardId) {
+      // Pick relevant column types to display
+      const SHOW_TYPES = new Set(["status","date","people","text","numbers","email","phone","link"]);
+      const displayCols = columns.filter(c => SHOW_TYPES.has(c.type)).slice(0, 5);
+
+      // Build header
+      mondayItemsThead.innerHTML = "";
+      const thName = document.createElement("th");
+      thName.textContent = "Item Name";
+      mondayItemsThead.appendChild(thName);
+      displayCols.forEach(c => {
+        const th = document.createElement("th");
+        th.textContent = c.title;
+        mondayItemsThead.appendChild(th);
+      });
+      const thLink = document.createElement("th");
+      thLink.textContent = "Item URL";
+      mondayItemsThead.appendChild(thLink);
+
+      // Filter out "Done" items
+      const openItems = items.filter(item => {
+        const statusCol = item.column_values?.find(cv => cv.type === "status");
+        if (!statusCol) return true;
+        const lbl = (statusCol.label || statusCol.text || "").toLowerCase();
+        return lbl !== "done" && lbl !== "completed" && lbl !== "closed";
+      });
+
+      // Count summary
+      const doneCount = items.length - openItems.length;
+      mondayItemsCount.textContent =
+        `${openItems.length} open item${openItems.length !== 1 ? "s" : ""}` +
+        (doneCount > 0 ? ` (${doneCount} done excluded)` : "");
+
+      // Build rows
+      mondayItemsTbody.innerHTML = "";
+      if (!openItems.length) {
+        const tr = document.createElement("tr");
+        const td = document.createElement("td");
+        td.colSpan = displayCols.length + 2;
+        td.style.color = "#6c7086";
+        td.style.textAlign = "center";
+        td.textContent = "No open items found.";
+        tr.appendChild(td);
+        mondayItemsTbody.appendChild(tr);
+        return;
+      }
+
+      openItems.forEach(item => {
+        const tr = document.createElement("tr");
+
+        // Name cell
+        const tdName = document.createElement("td");
+        tdName.style.fontWeight = "500";
+        tdName.textContent = item.name;
+        tr.appendChild(tdName);
+
+        // Column value cells
+        displayCols.forEach(col => {
+          const cv = item.column_values?.find(v => v.id === col.id);
+          const td = document.createElement("td");
+
+          if (!cv || (!cv.text && !cv.label)) {
+            td.textContent = "—";
+            td.style.color = "#6c7086";
+          } else if (col.type === "status") {
+            const lbl = cv.label || cv.text || "";
+            const chip = document.createElement("span");
+            chip.className = "monday-status-chip " + statusChipClass(lbl);
+            chip.textContent = lbl;
+            td.appendChild(chip);
+          } else if (col.type === "people") {
+            td.textContent = cv.text || "—";
+          } else {
+            td.textContent = cv.date || cv.text || "—";
+          }
+          tr.appendChild(td);
+        });
+
+        // URL cell
+        const tdLink = document.createElement("td");
+        if (item.relative_link) {
+          const a = document.createElement("a");
+          a.className = "monday-item-link";
+          a.href = "#";
+          const fullUrl = MONDAY_BASE + item.relative_link;
+          a.title = fullUrl;
+          a.textContent = fullUrl.length > 48 ? fullUrl.slice(0, 48) + "…" : fullUrl;
+          a.addEventListener("click", e => {
+            e.preventDefault();
+            api.openFile(fullUrl).catch(() => {});
+          });
+          tdLink.appendChild(a);
+        } else {
+          tdLink.textContent = "—";
+          tdLink.style.color = "#6c7086";
+        }
+        tr.appendChild(tdLink);
+
+        mondayItemsTbody.appendChild(tr);
+      });
+    }
+
+    // ── Load items for a board ───────────────────────────────────────────────
+    async function loadBoardItems(boardId, boardName) {
+      selectedBoardId = boardId;
+      mondayItemsCard.style.display = "block";
+      mondayItemsTitle.textContent = "📋 " + boardName;
+      mondayItemsCount.textContent = "";
+      mondayItemsLoading.style.display = "block";
+      mondayItemsError.style.display = "none";
+      mondayItemsWrap.style.display = "none";
+      mondayNewItemName.value = "";
+      mondayAddResult.style.display = "none";
+
+      // Scroll to items card
+      mondayItemsCard.scrollIntoView({ behavior: "smooth", block: "start" });
+
+      const result = await api.getMondayBoardItems(boardId);
+
+      mondayItemsLoading.style.display = "none";
+
+      if (result.error) {
+        mondayItemsError.style.display = "block";
+        mondayItemsError.textContent = "❌ " + result.error;
+        return;
+      }
+
+      renderBoardItems(result.columns, result.items, boardId);
+      mondayItemsWrap.style.display = "block";
+    }
+
+    // ── Board list renderer ──────────────────────────────────────────────────
+    function renderMondayBoards(boards) {
+      mondayBoardsList.innerHTML = "";
+      if (!boards.length) {
+        mondayBoardsList.innerHTML = '<p style="font-size:13px;color:#6c7086;padding:4px 0;">No boards found.</p>';
+        mondayBoardsList.style.display = "block";
+        return;
+      }
+      boards.forEach(b => {
+        const row = document.createElement("div");
+        row.className = "monday-board-row";
+        row.dataset.boardId = b.id;
+        row.dataset.boardName = b.name;
+
+        const icon = document.createElement("span");
+        icon.className = "monday-board-icon";
+        icon.textContent = BOARD_KIND_ICONS[b.board_kind] ?? "📋";
+
+        const info = document.createElement("div");
+        info.className = "monday-board-info";
+
+        const name = document.createElement("div");
+        name.className = "monday-board-name";
+        name.title = b.name;
+        name.textContent = b.name;
+
+        const meta = document.createElement("div");
+        meta.className = "monday-board-meta";
+        const parts = [];
+        if (b.workspace?.name) parts.push("📂 " + b.workspace.name);
+        parts.push((b.items_count ?? 0).toLocaleString() + " items");
+        meta.textContent = parts.join("  ·  ");
+
+        info.append(name, meta);
+
+        const badge = document.createElement("span");
+        badge.className = "monday-board-badge" + (b.state === "active" ? " active" : "");
+        badge.textContent = b.state === "active" ? "Active" : b.state;
+
+        row.append(icon, info, badge);
+
+        row.addEventListener("click", () => {
+          // Highlight selected row
+          document.querySelectorAll(".monday-board-row").forEach(r => r.classList.remove("selected"));
+          row.classList.add("selected");
+          loadBoardItems(b.id, b.name);
+        });
+
+        mondayBoardsList.appendChild(row);
+      });
+      mondayBoardsList.style.display = "block";
+    }
+
+    // ── Load boards button ───────────────────────────────────────────────────
+    btnMondayBoards.addEventListener("click", async () => {
+      btnMondayBoards.disabled = true;
+      mondayError.style.display = "none";
+      mondayStatus.style.display = "block";
+      mondayStatus.textContent = "Loading boards…";
+      mondayBoardsList.style.display = "none";
+      mondayBoardsList.innerHTML = "";
+      mondayItemsCard.style.display = "none";
+      selectedBoardId = null;
+
+      api.removeAllListeners("monday-error");
+      api.onMondayError(msg => {
+        mondayStatus.style.display = "none";
+        mondayError.style.display = "block";
+        mondayError.textContent = "❌ " + msg;
+        btnMondayBoards.disabled = false;
+      });
+
+      const { boards } = await api.listMondayBoards();
+      mondayStatus.style.display = "none";
+      btnMondayBoards.disabled = false;
+      if (boards.length === 0 && mondayError.style.display === "none") {
+        mondayError.style.display = "block";
+        mondayError.textContent = "No boards returned. Check your Monday API token in .bob/mcp.json.";
+        return;
+      }
+      renderMondayBoards(boards);
+    });
+
+    // ── Add item button ──────────────────────────────────────────────────────
+    btnAddMondayItem.addEventListener("click", async () => {
+      const name = mondayNewItemName.value.trim();
+      if (!name || !selectedBoardId) return;
+
+      btnAddMondayItem.disabled = true;
+      mondayAddResult.style.display = "none";
+
+      const result = await api.createMondayItem(selectedBoardId, name);
+      btnAddMondayItem.disabled = false;
+
+      if (result.error || !result.item) {
+        mondayAddResult.className = "err";
+        mondayAddResult.textContent = "❌ " + (result.error || "Failed to create item.");
+        mondayAddResult.style.display = "block";
+        return;
+      }
+
+      mondayAddResult.className = "ok";
+      mondayAddResult.textContent = `✅ Item "${result.item.name}" created (ID: ${result.item.id})`;
+      mondayAddResult.style.display = "block";
+      mondayNewItemName.value = "";
+
+      // Reload items to show the new one
+      const board = document.querySelector(".monday-board-row.selected");
+      if (board) loadBoardItems(board.dataset.boardId, board.dataset.boardName);
+    });
+
+    // Also allow Enter key to submit new item
+    mondayNewItemName.addEventListener("keydown", e => {
+      if (e.key === "Enter") btnAddMondayItem.click();
+    });
 
     // ── Boot ──────────────────────────────────────────────────────────────────
     (async () => {

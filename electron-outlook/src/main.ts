@@ -1092,7 +1092,142 @@ ipcMain.handle("start-extraction", async (
 });
 
 ipcMain.handle("open-file", async (_event, args: { path: string }) => {
-  await shell.openPath(args.path);
+  if (args.path.startsWith("http://") || args.path.startsWith("https://")) {
+    await shell.openExternal(args.path);
+  } else {
+    await shell.openPath(args.path);
+  }
+});
+
+// ── Monday Boards ─────────────────────────────────────────────────────────────
+const MONDAY_API_TOKEN = (() => {
+  const candidates = [
+    path.join(__dirname, "..", "..", "..", ".bob", "mcp.json"),
+    path.join(__dirname, "..", "..", ".bob", "mcp.json"),
+    path.join(process.resourcesPath ?? "", ".bob", "mcp.json"),
+  ];
+  for (const c of candidates) {
+    try {
+      const cfg = JSON.parse(fs.readFileSync(c, "utf8"));
+      const token = cfg?.mcpServers?.monday?.headers?.Authorization;
+      if (token) return token as string;
+    } catch { /* not found */ }
+  }
+  return null;
+})();
+
+function mondayGraphQL(query: string): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    if (!MONDAY_API_TOKEN) {
+      reject(new Error("Monday API token not configured in .bob/mcp.json"));
+      return;
+    }
+    const body = JSON.stringify({ query });
+    const options = {
+      hostname: "api.monday.com",
+      path: "/v2",
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "Authorization": MONDAY_API_TOKEN,
+        "Content-Length": Buffer.byteLength(body),
+      },
+    };
+    const req = https.request(options, (res) => {
+      let data = "";
+      res.on("data", (chunk) => { data += chunk; });
+      res.on("end", () => {
+        try { resolve(JSON.parse(data)); }
+        catch (e) { reject(new Error("Failed to parse Monday API response")); }
+      });
+    });
+    req.on("error", reject);
+    req.write(body);
+    req.end();
+  });
+}
+
+ipcMain.handle("list-monday-boards", async () => {
+  try {
+    const query = `{ boards(limit: 100, order_by: used_at) {
+      id name description board_kind state
+      items_count
+      workspace { id name }
+      columns { id title type }
+    } }`;
+    const result = await mondayGraphQL(query) as { data?: { boards?: unknown[] }; errors?: unknown[] };
+    if (result.errors) {
+      const msg = JSON.stringify(result.errors);
+      send("monday-error", { message: msg });
+      return { boards: [] };
+    }
+    return { boards: result.data?.boards ?? [] };
+  } catch (err) {
+    send("monday-error", { message: err instanceof Error ? err.message : String(err) });
+    return { boards: [] };
+  }
+});
+
+ipcMain.handle("get-monday-board-items", async (_event, args: { boardId: string }) => {
+  try {
+    // Fetch up to 200 items with their column values; filter out Done on the renderer side
+    const query = `{
+      boards(ids: [${args.boardId}]) {
+        columns { id title type }
+        items_page(limit: 200) {
+          items {
+            id
+            name
+            state
+            relative_link
+            column_values {
+              id
+              type
+              text
+              ... on StatusValue { label index }
+              ... on DateValue   { date }
+            }
+          }
+        }
+      }
+    }`;
+    const result = await mondayGraphQL(query) as {
+      data?: { boards?: Array<{
+        columns: Array<{ id: string; title: string; type: string }>;
+        items_page: { items: unknown[] };
+      }> };
+      errors?: unknown[];
+    };
+    if (result.errors) {
+      return { items: [], columns: [], error: JSON.stringify(result.errors) };
+    }
+    const board = result.data?.boards?.[0];
+    return {
+      columns: board?.columns ?? [],
+      items: board?.items_page?.items ?? [],
+    };
+  } catch (err) {
+    return { items: [], columns: [], error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+ipcMain.handle("create-monday-item", async (_event, args: { boardId: string; itemName: string }) => {
+  try {
+    const escaped = args.itemName.replace(/"/g, '\\"');
+    const mutation = `mutation {
+      create_item(board_id: ${args.boardId}, item_name: "${escaped}") { id name }
+    }`;
+    const result = await mondayGraphQL(mutation) as {
+      data?: { create_item?: { id: string; name: string } };
+      errors?: unknown[];
+    };
+    if (result.errors) {
+      return { item: null, error: JSON.stringify(result.errors) };
+    }
+    return { item: result.data?.create_item ?? null };
+  } catch (err) {
+    return { item: null, error: err instanceof Error ? err.message : String(err) };
+  }
 });
 
 // ── App lifecycle ─────────────────────────────────────────────────────────────

@@ -7,6 +7,10 @@ Microsoft Identity Platform via OAuth 2.0 Authorization Code + PKCE, fetches you
 mailbox folder tree through the Microsoft Graph API, and exports selected emails in
 one of five formats — all without storing any password.
 
+The app also integrates with **Monday.com**: a dedicated card lets you view all your
+Monday boards (name, workspace, item count, state) by calling the Monday GraphQL API
+directly from the main process using the token stored in `.bob/mcp.json`.
+
 All UI state (format selection, field toggles, filters, date, ZIP option) is reset
 to defined defaults on every app launch via an explicit `resetUI()` call in the boot
 sequence — no state is persisted between sessions.
@@ -14,16 +18,21 @@ sequence — no state is persisted between sessions.
 ```mermaid
 flowchart TD
     ENV[".env (project root)\nCLIENT_ID · EXCLUDED_DOMAIN\nREDIRECT_URI · LOGIN_HINT"]
+    MCPCFG[".bob/mcp.json (project root)\nMonday API token"]
 
     subgraph App["electron-outlook — Electron Desktop App"]
-        MAIN["main.ts\nMain process\nAuth · Graph API · Export logic · ZIP"]
+        MAIN["main.ts\nMain process\nAuth · Graph API · Export logic · ZIP\nMonday GraphQL client"]
         PRE["preload.ts\nContext bridge\nIPC channel definitions"]
-        UI["renderer/index.html\nRenderer process\nFolder tree · Export options UI\nresetUI() on every boot"]
+        UI["renderer/index.html\nRenderer process\nFolder tree · Export options UI\nMonday Boards card\nresetUI() on every boot"]
     end
 
     subgraph Microsoft["Microsoft Cloud"]
         IDP["Microsoft Identity Platform\nlogin.microsoftonline.com"]
         GRAPH["Microsoft Graph API\ngraph.microsoft.com/v1.0"]
+    end
+
+    subgraph Monday["Monday.com"]
+        MAPI["Monday GraphQL API\napi.monday.com/v2"]
     end
 
     subgraph Output["Output  (electron-outlook/output/ — gitignored)"]
@@ -37,6 +46,7 @@ flowchart TD
     end
 
     ENV --> MAIN
+    MCPCFG --> MAIN
     UI -->|IPC invoke| MAIN
     MAIN -->|IPC send| UI
     MAIN -->|OAuth 2.0 PKCE| IDP
@@ -44,6 +54,8 @@ flowchart TD
     MAIN -->|GET /me/mailFolders recursive| GRAPH
     MAIN -->|GET mailFolders + messages paginated\nPrefer: IdType='ImmutableId'| GRAPH
     GRAPH -->|JSON| MAIN
+    MAIN -->|POST /v2 GraphQL\nboards query| MAPI
+    MAPI -->|boards JSON| MAIN
     MAIN --> CSV1 & CSV2 & JSON & EML & SQLITE
     CSV1 & CSV2 & JSON & EML & SQLITE -->|zipOutput=true| ZIP
     IDP --> CACHE
@@ -123,9 +135,57 @@ flowchart TD
 | `list-folders` | renderer → main | — | Fetch full folder tree recursively |
 | `start-extraction` | renderer → main | `folderIds, folderTree, since?, exportParams` | Run export |
 | `open-file` | renderer → main | `path` | Open file/folder with OS default app |
+| `list-monday-boards` | renderer → main | — | Fetch all Monday boards via GraphQL API |
 | `progress` | main → renderer | `{ message }` | Live status updates |
 | `done` | main → renderer | `{ outputPath, count, format }` | Extraction complete |
 | `error` | main → renderer | `{ message }` | Error notification |
+| `monday-error` | main → renderer | `{ message }` | Monday API error notification |
+
+---
+
+## Monday.com Integration
+
+### Token resolution
+
+At startup, `main.ts` scans three candidate paths for `.bob/mcp.json` and extracts
+`mcpServers.monday.headers.Authorization`. The first match wins:
+
+1. `<__dirname>/../../../.bob/mcp.json` ← dev (source) layout
+2. `<__dirname>/../../.bob/mcp.json` ← alternative dev layout
+3. `<process.resourcesPath>/.bob/mcp.json` ← packaged app layout
+
+If no token is found, `MONDAY_API_TOKEN` is `null` and the IPC handler returns an error
+sent via the `monday-error` channel.
+
+### GraphQL query
+
+```graphql
+{
+  boards(limit: 100, order_by: used_at) {
+    id
+    name
+    description
+    board_kind
+    state
+    items_count
+    workspace { id name }
+  }
+}
+```
+
+### `MondayBoard` type (preload / renderer)
+
+```typescript
+interface MondayBoard {
+  id:          string;
+  name:        string;
+  description: string | null;
+  board_kind:  string;   // "public" | "private" | "share"
+  state:       string;   // "active" | "archived" | "deleted"
+  items_count: number;
+  workspace:   { id: string; name: string } | null;
+}
+```
 
 ---
 
@@ -238,6 +298,8 @@ Duplicate filenames within the same folder are disambiguated by appending `_1`, 
 Outlook-Bob/
 ├── .env.example                          # Config template → copy to .env
 ├── .env                                  # Your secrets (gitignored)
+├── .bob/
+│   └── mcp.json                          # MCP server config — Monday API token lives here
 ├── .gitignore
 ├── README.md
 ├── Docs/
@@ -250,10 +312,10 @@ Outlook-Bob/
 │   └── stop-electron-outlook.ps1         # Stop gracefully (Windows)
 └── electron-outlook/
     ├── src/
-    │   ├── main.ts                        # Main process — auth, Graph API, export logic, ZIP
-    │   ├── preload.ts                     # Context bridge — IPC channel definitions + types
+    │   ├── main.ts                        # Main process — auth, Graph API, export logic, ZIP, Monday GraphQL client
+    │   ├── preload.ts                     # Context bridge — IPC channel definitions + types (incl. MondayBoard)
     │   └── renderer/
-    │       └── index.html                 # Full UI — folder tree, export options, resetUI()
+    │       └── index.html                 # Full UI — folder tree, export options, Monday Boards card, resetUI()
     ├── package.json
     ├── tsconfig.json
     ├── Quickstart.md                      # App-specific quickstart
