@@ -13,7 +13,7 @@ flowchart TD
     D --> E[Load Folders\nGET /me/mailFolders recursive]
     E --> F[Folder tree rendered\nwith checkboxes + item counts]
     F --> G[User selects folders\n+ export format + field options\n+ filters + save attachments toggle\n+ ZIP toggle]
-    G --> H[Run Extraction\nGET messages per folder, paginated\nPrefer: IdType="ImmutableId"]
+    G --> H[Run Extraction\nGET messages per folder, paginated\nPrefer: IdType='ImmutableId']
     H --> I{Export format}
     I -- Recipients CSV --> J1[Unique addresses deduplicated\noutput/recipients_TIMESTAMP.csv]
     I -- Emails CSV --> J2[One row per message\noutput/emails_TIMESTAMP.csv]
@@ -66,16 +66,46 @@ No Azure App Registration needed — uses Microsoft's public Graph Explorer clie
 
 ## Quickstart
 
-```bash
-# 1. Copy and configure
-cp .env.example .env          # optional — defaults work out of the box
+For a complete beginner-friendly guide, see [`Docs/Quickstart.md`](Docs/Quickstart.md).
 
-# 2. Launch (builds automatically on first run)
+### 1. Clone the repository
+
+```bash
+git clone <repository-url>
+cd Outlook-Bob
+pwd
+ls
+```
+
+### 2. Configure (optional)
+
+```bash
+cp .env.example .env
+```
+
+### 3. Launch from the project root
+
+**macOS / Linux:**
+```bash
+bash scripts/start-electron-outlook.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\start-electron-outlook.ps1
+```
+
+### 4. Manual launch alternative
+
+```bash
 cd electron-outlook
+npm install
 npm start
 ```
 
-See [`electron-outlook/Quickstart.md`](electron-outlook/Quickstart.md) for full details including Windows instructions and troubleshooting.
+When the app starts successfully, the **Outlook Folder Extractor** desktop window opens and you can click **Connect to Microsoft**.
+
+See [`electron-outlook/Quickstart.md`](electron-outlook/Quickstart.md) and [`Docs/Quickstart.md`](Docs/Quickstart.md) for full details including troubleshooting.
 
 ## Configuration
 

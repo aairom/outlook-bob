@@ -42,7 +42,7 @@ flowchart TD
     MAIN -->|OAuth 2.0 PKCE| IDP
     IDP -->|access_token + refresh_token| MAIN
     MAIN -->|GET /me/mailFolders recursive| GRAPH
-    MAIN -->|GET mailFolders + messages paginated\nPrefer: IdType="ImmutableId"| GRAPH
+    MAIN -->|GET mailFolders + messages paginated\nPrefer: IdType='ImmutableId'| GRAPH
     GRAPH -->|JSON| MAIN
     MAIN --> CSV1 & CSV2 & JSON & EML & SQLITE
     CSV1 & CSV2 & JSON & EML & SQLITE -->|zipOutput=true| ZIP
@@ -99,7 +99,7 @@ flowchart TD
     D --> E[Load Folders\nGET /me/mailFolders recursive]
     E --> F[Folder tree rendered\ncheckboxes + item counts]
     F --> G[User picks folders\n+ export format + field toggles\n+ domain filter + flagged filter\n+ save attachments toggle + ZIP toggle]
-    G --> H[Run Extraction\nGET messages per folder, paginated\nPrefer: IdType="ImmutableId"\n$select only requested fields + webLink/internetMessageId\nbody plain text = HTML stripped]
+    G --> H[Run Extraction\nGET messages per folder, paginated\nPrefer: IdType='ImmutableId'\n$select only requested fields + webLink/internetMessageId\nbody plain text = HTML stripped]
     H --> I{Export format}
     I --> J1["Recipients CSV\noutput/recipients_TIMESTAMP.csv"]
     I --> J2["Emails CSV\noutput/emails_TIMESTAMP.csv"]

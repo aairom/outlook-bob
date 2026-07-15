@@ -24,14 +24,26 @@ Graph Explorer client which works for any Microsoft 365 account.
 
 ## 2. Clone the repository
 
+Open a terminal and run these commands one line at a time:
+
 ```bash
 git clone <repository-url>
 cd Outlook-Bob
+pwd
+ls
 ```
+
+What these commands do:
+- `git clone <repository-url>` downloads the project to your computer.
+- `cd Outlook-Bob` moves into the project folder.
+- `pwd` shows your current directory so you can confirm you are inside `Outlook-Bob`.
+- `ls` lists the files and folders in the project root.
+
+You should now be in the project root folder and able to see folders such as `Docs`, `electron-outlook`, and `scripts`.
 
 ## 3. Configure (optional)
 
-Copy `.env.example` to `.env` at the project root. All defaults work out of the box —
+From the project root folder (`Outlook-Bob`), copy `.env.example` to `.env`. All defaults work out of the box —
 editing is only needed if you want to use your own Azure App Registration or change
 the default excluded domain.
 
@@ -62,12 +74,19 @@ Copy-Item .env.example .env
 
 ## 4. Launch
 
-The scripts handle `npm install` and TypeScript compilation automatically.
+### Recommended launch method
+
+Stay in the project root folder (`Outlook-Bob`) and run:
 
 **macOS / Linux:**
 ```bash
 bash scripts/start-electron-outlook.sh
 ```
+
+This script:
+- installs npm packages when needed
+- builds the TypeScript app
+- launches the Electron desktop window
 
 **Windows (PowerShell):**
 ```powershell
@@ -77,10 +96,27 @@ powershell -ExecutionPolicy Bypass -File scripts\start-electron-outlook.ps1
 > **First run only (Windows):** if PowerShell blocks the script, run
 > `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` once in an elevated terminal.
 
-**Or run directly from the app folder:**
+### Manual launch method
+
+If you prefer to run the app manually, use these commands from the project root:
+
 ```bash
-cd electron-outlook && npm start
+cd electron-outlook
+npm install
+npm start
 ```
+
+What these commands do:
+- `cd electron-outlook` moves into the Electron app folder.
+- `npm install` downloads the required Node.js packages.
+- `npm start` builds and launches the desktop app.
+
+### How to know it worked
+
+After launch:
+- a desktop window named **Outlook Folder Extractor** should open
+- the app will show buttons such as **Connect to Microsoft** and **Load Folders**
+- on macOS/Linux, you can stop it later with `bash scripts/stop-electron-outlook.sh`
 
 ---
 

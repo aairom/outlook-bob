@@ -27,11 +27,13 @@ if ! command -v node &>/dev/null; then
     exit 1
 fi
 
-# Install dependencies if node_modules is missing
+# Install dependencies
 if [ ! -d "$APP_DIR/node_modules" ]; then
-    echo "📦  Installing dependencies…"
-    npm install --prefix "$APP_DIR"
+    echo "📦  Installing dependencies (first run)…"
+else
+    echo "📦  Installing / verifying dependencies…"
 fi
+npm install --prefix "$APP_DIR"
 
 # Download Electron binary if path.txt is missing
 ELECTRON_PATH_FILE="$APP_DIR/node_modules/electron/path.txt"
