@@ -329,10 +329,21 @@ When **Preview** format is selected, a **"👁 Load up to N emails"** selector a
 
 The preview card shows:
 - A scrollable email list (sender, date, subject, body snippet, 🚩📎❗ badges)
+- A checkbox on the left of every row — tick one or more emails to select them for download
+- **Select all** / **Deselect all** buttons in the toolbar to toggle all visible rows at once
 - A live search bar that filters by subject, sender, or body text
-- A reading pane that opens when you click any row (From, To, Date, Folder, full body)
+- A reading pane that opens when you click any row body (From, To, Date, Folder, full body)
 
-No file is written to disk when using Preview.
+#### Downloading selected emails as EML
+
+1. Tick the checkbox next to each email you want to save (or use **Select all**).
+2. A purple action bar appears showing the count of selected emails and a **⬇ Download as EML** button.
+3. Click **⬇ Download as EML**. A timestamped folder is created in `output/preview_download_<timestamp>/` containing one `.eml` file per selected message.
+4. A confirmation line appears below the action bar with the folder path. Open it in Finder / Explorer to access the files.
+
+> Downloading from the Preview card does **not** require running a full extraction first — it uses the messages already loaded on screen.
+
+No file is written to disk when simply browsing the preview; files are only saved when you explicitly click **⬇ Download as EML**.
 
 ### Step 11 — Run
 Click **"Run Extraction"** (or **"👁 Preview Emails"** in Preview mode). The progress log shows live updates:
@@ -360,11 +371,14 @@ output/
 ├── recipients_20250625_143022.csv          # Recipients CSV  (timestamped)
 ├── emails_20250625_143022.csv              # Emails CSV      (timestamped)
 ├── emails_20250625_143022.json             # JSON            (timestamped)
-├── eml_export_20250625_143022/             # EML files       (timestamped directory)
+├── eml_export_20250625_143022/             # EML Files export (timestamped directory)
 │   ├── Sent Items/
 │   │   └── 2025-06-25T14-30-22_<id>.eml
 │   └── Inbox/
 │       └── 2025-06-25T10-00-00_<id>.eml
+├── preview_download_20250625_150000/       # Preview → Download Selected (timestamped directory)
+│   ├── 2025-06-25T14-30-22_<id>.eml
+│   └── 2025-06-25T10-00-00_<id>.eml
 ├── emails.sqlite                           # SQLite DB       (persistent, NOT timestamped)
 ├── emails_20250625_143022.zip              # ZIP of any export (when ZIP option checked)
 └── attachments_20250625_143022/            # Attachment files (timestamped, never zipped)

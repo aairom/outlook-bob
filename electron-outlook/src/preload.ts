@@ -118,6 +118,11 @@ contextBridge.exposeInMainWorld("electronAPI", {
   }): Promise<{ messages: PreviewMessage[]; error?: string }> =>
     ipcRenderer.invoke("preview-emails", args),
 
+  downloadSelectedEmails: (args: {
+    messages: PreviewMessage[];
+  }): Promise<{ count: number; outputPath: string; error?: string }> =>
+    ipcRenderer.invoke("download-selected-emails", args),
+
   // ── Events ─────────────────────────────────────────────────────────────────
   onProgress: (cb: (message: string) => void) => {
     ipcRenderer.on("progress", (_e, payload: { message: string }) => cb(payload.message));

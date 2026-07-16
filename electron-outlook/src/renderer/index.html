@@ -199,6 +199,39 @@
     #preview-search:focus { border-color: #cba6f7; }
     #preview-search::placeholder { color: #45475a; }
 
+    /* Selection toolbar (shown only when ≥1 email is checked) */
+    #preview-selection-bar {
+      display: none; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 8px 12px; background: #2a2040; border: 1px solid #cba6f7;
+      border-radius: 8px; margin-bottom: 10px;
+      font-size: 12px; color: #cba6f7;
+    }
+    #preview-selected-count { font-weight: 600; }
+    #btn-download-selected {
+      -webkit-app-region: no-drag;
+      background: #cba6f7; color: #1e1e2e;
+      padding: 6px 14px; border: none; border-radius: 7px;
+      font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+    }
+    #btn-download-selected:hover { opacity: 0.82; }
+    #btn-select-all-emails, #btn-deselect-all-emails {
+      -webkit-app-region: no-drag;
+      background: #313244; color: #a6adc8; border: 1px solid #45475a;
+      padding: 5px 11px; border-radius: 7px;
+      font-size: 12px; cursor: pointer; transition: opacity 0.15s;
+    }
+    #btn-select-all-emails:hover, #btn-deselect-all-emails:hover { opacity: 0.75; }
+    #download-status { font-size: 12px; margin-top: 6px; display: none; }
+    #download-status.ok  { color: #a6e3a1; }
+    #download-status.err { color: #f38ba8; }
+
+    /* per-row checkbox */
+    .email-row-check {
+      -webkit-app-region: no-drag;
+      width: 15px; height: 15px; flex-shrink: 0;
+      accent-color: #cba6f7; cursor: pointer; margin-top: 3px;
+    }
+
     #preview-list-wrap {
       background: #1e1e2e; border: 1px solid #45475a; border-radius: 8px;
       overflow-x: hidden; overflow-y: auto; max-height: 480px;
@@ -212,6 +245,7 @@
     .email-row:last-child { border-bottom: none; }
     .email-row:hover { background: #26263a; }
     .email-row.selected { background: #2a2040; border-left: 3px solid #cba6f7; padding-left: 9px; }
+    .email-row.checked  { background: #201830; }
     .email-row.unread .email-subject { font-weight: 700; color: #cdd6f4; }
     .email-meta { flex: 1; min-width: 0; }
     .email-top { display: flex; align-items: baseline; gap: 8px; flex-wrap: wrap; }
@@ -574,7 +608,17 @@
       <p class="section-title" style="margin:0;">📧 Email Preview</p>
       <input type="text" id="preview-search" placeholder="Search subject, from, body…" />
       <span id="preview-count"></span>
+      <button id="btn-select-all-emails" title="Select all visible emails">Select all</button>
+      <button id="btn-deselect-all-emails" title="Deselect all emails">Deselect all</button>
     </div>
+
+    <!-- Selection action bar (visible only when ≥1 email checked) -->
+    <div id="preview-selection-bar">
+      <span id="preview-selected-count">0</span> email(s) selected
+      <button id="btn-download-selected">⬇ Download as EML</button>
+      <span style="color:#6c7086; font-size:11px;">Files saved to output/</span>
+    </div>
+    <div id="download-status"></div>
 
     <div id="preview-list-wrap">
       <div id="preview-empty">No messages to display.</div>
@@ -1038,23 +1082,37 @@
     const previewListWrap  = document.getElementById("preview-list-wrap");
     const previewEmpty     = document.getElementById("preview-empty");
     const previewCount     = document.getElementById("preview-count");
-    const previewSearch    = document.getElementById("preview-search");
-    const emailPane        = document.getElementById("email-pane");
-    const emailPaneSubject = document.getElementById("email-pane-subject");
-    const emailPaneFrom    = document.getElementById("email-pane-from");
-    const emailPaneTo      = document.getElementById("email-pane-to");
-    const emailPaneDate    = document.getElementById("email-pane-date");
-    const emailPaneFolder  = document.getElementById("email-pane-folder");
-    const emailPaneBody    = document.getElementById("email-pane-body");
+    const previewSearch     = document.getElementById("preview-search");
+    const previewSelBar     = document.getElementById("preview-selection-bar");
+    const previewSelCount   = document.getElementById("preview-selected-count");
+    const btnDownloadSel    = document.getElementById("btn-download-selected");
+    const btnSelectAllEmails   = document.getElementById("btn-select-all-emails");
+    const btnDeselectAllEmails = document.getElementById("btn-deselect-all-emails");
+    const downloadStatus    = document.getElementById("download-status");
+    const emailPane         = document.getElementById("email-pane");
+    const emailPaneSubject  = document.getElementById("email-pane-subject");
+    const emailPaneFrom     = document.getElementById("email-pane-from");
+    const emailPaneTo       = document.getElementById("email-pane-to");
+    const emailPaneDate     = document.getElementById("email-pane-date");
+    const emailPaneFolder   = document.getElementById("email-pane-folder");
+    const emailPaneBody     = document.getElementById("email-pane-body");
 
     let allPreviewMessages = [];
     let selectedEmailId    = null;
+    // Set of message ids that the user has checked for download
+    let checkedEmailIds = new Set();
 
     function fmtDate(iso) {
       if (!iso) return "";
       const d = new Date(iso);
       return d.toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" }) +
              " " + d.toLocaleTimeString(undefined, { hour: "2-digit", minute: "2-digit" });
+    }
+
+    function updateSelectionBar() {
+      const n = checkedEmailIds.size;
+      previewSelCount.textContent = n;
+      previewSelBar.style.display = n > 0 ? "flex" : "none";
     }
 
     function renderEmailList(messages) {
@@ -1070,9 +1128,31 @@
       previewCount.textContent = messages.length + " message" + (messages.length !== 1 ? "s" : "");
 
       messages.forEach(msg => {
+        const isChecked = checkedEmailIds.has(msg.id);
         const row = document.createElement("div");
-        row.className = "email-row" + (msg.isRead ? "" : " unread") + (msg.id === selectedEmailId ? " selected" : "");
+        row.className = "email-row"
+          + (msg.isRead ? "" : " unread")
+          + (msg.id === selectedEmailId ? " selected" : "")
+          + (isChecked ? " checked" : "");
         row.dataset.id = msg.id;
+
+        // ── per-row checkbox ──────────────────────────────────────────────────
+        const chk = document.createElement("input");
+        chk.type = "checkbox";
+        chk.className = "email-row-check";
+        chk.checked = isChecked;
+        chk.title = "Select for download";
+        chk.addEventListener("change", (e) => {
+          e.stopPropagation();
+          if (chk.checked) {
+            checkedEmailIds.add(msg.id);
+            row.classList.add("checked");
+          } else {
+            checkedEmailIds.delete(msg.id);
+            row.classList.remove("checked");
+          }
+          updateSelectionBar();
+        });
 
         const meta = document.createElement("div");
         meta.className = "email-meta";
@@ -1104,9 +1184,11 @@
         if (msg.hasAttachments) { const b = document.createElement("span"); b.className = "email-badge"; b.title = "Has attachments"; b.textContent = "📎"; badges.appendChild(b); }
         if (msg.importance === "high") { const b = document.createElement("span"); b.className = "email-badge"; b.title = "High importance"; b.textContent = "❗"; badges.appendChild(b); }
 
-        row.append(meta, badges);
+        row.append(chk, meta, badges);
 
-        row.addEventListener("click", () => {
+        // clicking the row body (not the checkbox) opens the reading pane
+        row.addEventListener("click", (e) => {
+          if (e.target === chk) return;
           previewListWrap.querySelectorAll(".email-row").forEach(r => r.classList.remove("selected"));
           row.classList.add("selected");
           selectedEmailId = msg.id;
@@ -1116,6 +1198,46 @@
         previewListWrap.appendChild(row);
       });
     }
+
+    // ── Select / Deselect all emails ──────────────────────────────────────────
+    btnSelectAllEmails.addEventListener("click", () => {
+      allPreviewMessages.forEach(m => checkedEmailIds.add(m.id));
+      // re-render visible rows to reflect new state
+      previewListWrap.querySelectorAll(".email-row").forEach(row => {
+        const cb = row.querySelector(".email-row-check");
+        if (cb) { cb.checked = true; row.classList.add("checked"); }
+      });
+      updateSelectionBar();
+    });
+
+    btnDeselectAllEmails.addEventListener("click", () => {
+      checkedEmailIds.clear();
+      previewListWrap.querySelectorAll(".email-row").forEach(row => {
+        const cb = row.querySelector(".email-row-check");
+        if (cb) { cb.checked = false; row.classList.remove("checked"); }
+      });
+      updateSelectionBar();
+    });
+
+    // ── Download selected emails as EML ──────────────────────────────────────
+    btnDownloadSel.addEventListener("click", async () => {
+      if (!checkedEmailIds.size) return;
+      const msgs = allPreviewMessages.filter(m => checkedEmailIds.has(m.id));
+      btnDownloadSel.disabled = true;
+      downloadStatus.style.display = "none";
+
+      const result = await api.downloadSelectedEmails({ messages: msgs });
+
+      btnDownloadSel.disabled = false;
+      downloadStatus.style.display = "block";
+      if (result.error) {
+        downloadStatus.className = "err";
+        downloadStatus.textContent = "❌ " + result.error;
+      } else {
+        downloadStatus.className = "ok";
+        downloadStatus.textContent = `✅ ${result.count} email(s) saved → ${result.outputPath}`;
+      }
+    });
 
     function openEmailPane(msg) {
       emailPaneSubject.textContent = msg.subject;
@@ -1155,6 +1277,10 @@
       emailPane.style.display    = "none";
       previewSearch.value        = "";
       previewCount.textContent   = "Loading…";
+      // Reset selection state for a fresh load
+      checkedEmailIds.clear();
+      previewSelBar.style.display = "none";
+      downloadStatus.style.display = "none";
       clearLog();
 
       api.removeAllListeners("progress");
@@ -1244,9 +1370,12 @@
         document.getElementById("preview-search").value = "";
         document.getElementById("preview-count").textContent = "";
         document.getElementById("preview-list-wrap").querySelectorAll(".email-row").forEach(r => r.remove());
+        document.getElementById("preview-selection-bar").style.display = "none";
+        document.getElementById("download-status").style.display = "none";
       }
       allPreviewMessages = [];
       selectedEmailId    = null;
+      checkedEmailIds    = new Set();
 
       updateFieldVisibility();
     }

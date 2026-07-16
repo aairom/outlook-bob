@@ -1162,6 +1162,65 @@ ipcMain.handle("preview-emails", async (
 });
 
 
+/**
+ * Writes EML files for messages that were already fetched in preview mode.
+ * Preview messages carry pre-processed fields (from, fromName, to, subject,
+ * bodyText, bodyHtml, sentDateTime, folder, …) rather than raw Graph objects,
+ * so we build the EML directly from those fields.
+ */
+ipcMain.handle(
+  "download-selected-emails",
+  async (_event, args: { messages: Array<Record<string, unknown>> }) => {
+    try {
+      if (!args.messages?.length) return { count: 0, outputPath: "", error: "No emails provided." };
+
+      const exportDir = path.join(getOutputDir(), `preview_download_${timestamp()}`);
+      fs.mkdirSync(exportDir, { recursive: true });
+      let count = 0;
+
+      for (const msg of args.messages) {
+        const fromEmail  = String(msg["from"]     ?? "");
+        const fromName   = String(msg["fromName"] ?? "");
+        const fromHeader = fromName && fromName !== fromEmail
+          ? `"${fromName}" <${fromEmail}>` : (fromEmail || "unknown@unknown");
+        const toStr    = String(msg["to"]           ?? "");
+        const subject  = String(msg["subject"]      ?? "(no subject)");
+        const date     = String(msg["sentDateTime"] ?? "");
+        const folder   = String(msg["folder"]       ?? "");
+        const msgId    = String(msg["id"]           ?? count);
+
+        const bodyHtml = String(msg["bodyHtml"] ?? "");
+        const bodyText = String(msg["bodyText"] ?? "");
+        const hasHtml  = bodyHtml.length > 0;
+        const content  = hasHtml ? bodyHtml : bodyText;
+        const mime     = hasHtml ? "text/html" : "text/plain";
+
+        const eml = [
+          `From: ${fromHeader}`,
+          `To: ${toStr}`,
+          `Subject: ${subject}`,
+          `Date: ${date}`,
+          `Message-ID: ${msgId}`,
+          `MIME-Version: 1.0`,
+          `Content-Type: ${mime}; charset=utf-8`,
+          ...(folder ? [`X-Folder: ${folder}`] : []),
+          ``,
+          content,
+        ].join("\r\n");
+
+        const safeDate = date ? date.replace(/[:/\s]/g, "-").substring(0, 19) : `msg_${count}`;
+        const safeId   = msgId.replace(/[/\\:*?"<>|]/g, "").substring(0, 32);
+        fs.writeFileSync(path.join(exportDir, `${safeDate}_${safeId}.eml`), eml, "utf-8");
+        count++;
+      }
+
+      return { count, outputPath: exportDir };
+    } catch (err) {
+      return { count: 0, outputPath: "", error: err instanceof Error ? err.message : String(err) };
+    }
+  }
+);
+
 ipcMain.handle("open-file", async (_event, args: { path: string }) => {
   if (args.path.startsWith("http://") || args.path.startsWith("https://")) {
     await shell.openExternal(args.path);
