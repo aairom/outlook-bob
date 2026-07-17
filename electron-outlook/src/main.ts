@@ -1651,6 +1651,64 @@ ipcMain.handle("upload-to-box", async (
   }
 });
 
+// ── Box Drive (local mount) ───────────────────────────────────────────────────
+
+const BOX_DRIVE_CANDIDATES = [
+  path.join(process.env.HOME ?? "", "Library", "CloudStorage", "Box-Box"),
+  path.join(process.env.HOME ?? "", "Box"),
+  "/Volumes/Box",
+];
+
+function detectBoxDrivePath(): string | null {
+  for (const p of BOX_DRIVE_CANDIDATES) {
+    try { if (fs.statSync(p).isDirectory()) return p; } catch { /* not found */ }
+  }
+  return null;
+}
+
+ipcMain.handle("get-boxdrive-status", async () => {
+  const mountPath = detectBoxDrivePath();
+  return { mounted: mountPath !== null, mountPath: mountPath ?? "" };
+});
+
+ipcMain.handle("list-boxdrive-folders", async () => {
+  try {
+    const mountPath = detectBoxDrivePath();
+    if (!mountPath) return { folders: [], mountPath: "", error: "Box Drive folder not found. Is Box Drive installed and signed in?" };
+    const entries = fs.readdirSync(mountPath, { withFileTypes: true });
+    const folders = entries
+      .filter(e => e.isDirectory() && !e.name.startsWith("."))
+      .map(e => ({ name: e.name, path: path.join(mountPath, e.name) }));
+    return { folders, mountPath };
+  } catch (err) {
+    return { folders: [], mountPath: "", error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+ipcMain.handle("copy-to-boxdrive", async (
+  _event,
+  args: { localPath: string; destFolderPath: string; newFolderName?: string }
+) => {
+  const onProgress = (msg: string) => send("progress", { message: msg });
+  try {
+    let targetDir = args.destFolderPath || detectBoxDrivePath() || "";
+    if (!targetDir) return { destPath: "", fileName: "", error: "Box Drive folder not found." };
+    if (args.newFolderName?.trim()) {
+      targetDir = path.join(targetDir, args.newFolderName.trim());
+      if (!fs.existsSync(targetDir)) fs.mkdirSync(targetDir, { recursive: true });
+      onProgress(`📁 Created Box Drive folder: ${args.newFolderName.trim()}`);
+    }
+    const fileName = path.basename(args.localPath);
+    const dest = path.join(targetDir, fileName);
+    onProgress(`📦 Copying ${fileName} to Box Drive…`);
+    fs.copyFileSync(args.localPath, dest);
+    onProgress(`📦 Copied to Box Drive — Box will sync automatically.`);
+    return { destPath: dest, fileName };
+  } catch (err) {
+    return { destPath: "", fileName: "", error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
 // ── OneDrive integration ──────────────────────────────────────────────────────
 // OneDrive reuses the existing Microsoft access token (getAccessTokenSilent).
 // No new OAuth flow — the user is already authenticated via "Connect to Microsoft".
