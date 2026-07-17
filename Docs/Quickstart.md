@@ -69,11 +69,47 @@ Copy-Item .env.example .env
 | `REDIRECT_URI` | `http://localhost:8765` | OAuth callback URI — must match Azure registration if using your own |
 | `LOGIN_HINT` | _(empty)_ | Microsoft account email to pre-select at sign-in |
 
-> **Need your own CLIENT_ID?**  
-> Azure Portal → App registrations → New registration →  
-> Redirect URI: `http://localhost:8765` (public client / native) →  
-> API permissions → `Mail.Read` (delegated) → Grant admin consent →  
+> **Need your own CLIENT_ID?**
+> Azure Portal → App registrations → New registration →
+> Redirect URI: `http://localhost:8765` (public client / native) →
+> API permissions → `Mail.Read` (delegated) → Grant admin consent →
 > Copy the **Application (client) ID** into `.env`.
+
+### Cloud upload destinations (optional)
+
+The **Output Destination** card lets you choose where export files go:
+
+| Option | Requires |
+|---|---|
+| 💻 **Local** | Nothing — default |
+| ☁️ **Box** | IBM Box app approved by admin + credentials in `.env` |
+| 🔵 **OneDrive** | Microsoft connection only — no extra setup |
+| 💻+☁️ **Both (Box)** | Same as Box |
+| 💻+🔵 **Both (OneDrive)** | Same as OneDrive |
+
+### Box upload (optional)
+
+1. Go to [ibm.ent.box.com/developers/console](https://ibm.ent.box.com/developers/console) → create a **Custom App** → **User Authentication (OAuth 2.0)**
+2. Set Redirect URI to `http://localhost:8766`
+3. Add to `.env`:
+   ```
+   BOX_CLIENT_ID=your_client_id
+   BOX_CLIENT_SECRET=your_client_secret
+   BOX_REDIRECT_URI=http://localhost:8766
+   ```
+4. Ask your IBM Box admin to enable the app in Admin Console → Apps → Custom Apps Manager
+5. Click **Connect to Box** in the app — browser opens IBM Box login (w3id)
+
+> A ⏳ pending notice is shown in the UI until the admin approves. Everything else is functional in the meantime.
+
+### OneDrive upload (optional, zero setup)
+
+OneDrive reuses your existing Microsoft connection — **no extra credentials needed**.
+
+1. Click **Connect to Microsoft** (normal flow)
+2. Select **🔵 OneDrive** or **💻+🔵 Both (OneDrive)** in the Output Destination card
+3. Click **📂 Load OneDrive Folders** → select a folder (or type a new name)
+4. Run extraction — file uploads automatically after export completes
 
 ---
 

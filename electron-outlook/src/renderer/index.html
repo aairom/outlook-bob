@@ -320,6 +320,18 @@
     #result-msg.ok  { color: #a6e3a1; }
     #result-msg.err { color: #f38ba8; }
 
+    /* ── Destination toggle ── */
+    .dest-toggle-row { display: flex; gap: 8px; flex-wrap: wrap; }
+    .dest-btn {
+      -webkit-app-region: no-drag;
+      padding: 8px 20px; border: 2px solid #45475a; border-radius: 8px;
+      background: #1e1e2e; color: #a6adc8; font-size: 13px; font-weight: 500;
+      cursor: pointer; transition: border-color 0.15s, background 0.15s, color 0.15s;
+    }
+    .dest-btn:hover  { border-color: #89b4fa; color: #cdd6f4; }
+    .dest-btn.active { border-color: #89b4fa; background: #1a2a3a; color: #89b4fa; }
+    #box-new-folder-name:focus { border-color: #f9e2af !important; }
+
     /* ── Monday Boards ── */
     #monday-card { margin-top: 4px; }
     #btn-monday-boards { background: #f9e2af; color: #1e1e2e; }
@@ -570,6 +582,112 @@
     </div>
   </div>
 
+  <!-- ── Output destination card ── -->
+  <div class="card" id="destination-card">
+    <p class="section-title">Output destination</p>
+
+    <div class="dest-toggle-row">
+      <button class="dest-btn active" id="dest-local"      data-dest="local"     >💻 Local</button>
+      <button class="dest-btn"        id="dest-box"        data-dest="box"       >☁️ Box</button>
+      <button class="dest-btn"        id="dest-onedrive"   data-dest="onedrive"  >🔵 OneDrive</button>
+      <button class="dest-btn"        id="dest-both-box"   data-dest="both-box"  >💻+☁️ Both (Box)</button>
+      <button class="dest-btn"        id="dest-both-od"    data-dest="both-od"   >💻+🔵 Both (OneDrive)</button>
+    </div>
+
+    <!-- OneDrive section — shown when onedrive or both-od is selected -->
+    <div id="onedrive-config" style="display:none; margin-top:16px;">
+
+      <!-- OneDrive connection status -->
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+        <div id="od-status-badge" class="unauthed">
+          <span class="dot"></span>
+          <span id="od-status-text">Not connected to OneDrive</span>
+        </div>
+        <button id="btn-connect-od" style="-webkit-app-region:no-drag; background:#45475a; color:#cdd6f4; padding:7px 16px; border:none; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;">
+          Connect to OneDrive
+        </button>
+        <button id="btn-disconnect-od" style="-webkit-app-region:no-drag; background:#313244; color:#f38ba8; padding:7px 16px; border:1px solid #45475a; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer; display:none;">
+          Disconnect
+        </button>
+      </div>
+      <p style="font-size:11px; color:#6c7086; margin-bottom:12px;">
+        ℹ️ OneDrive uses your Microsoft 365 account — same login as email extraction.
+      </p>
+
+      <!-- OneDrive folder picker -->
+      <div id="od-folder-picker">
+        <p class="section-title" style="margin-bottom:8px;">OneDrive folder</p>
+
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+          <button id="btn-load-od-folders" style="-webkit-app-region:no-drag; background:#89b4fa; color:#1e1e2e; padding:7px 14px; border:none; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;">
+            📂 Load OneDrive Folders
+          </button>
+          <span id="od-folders-status" style="font-size:12px; color:#89b4fa; display:none;">Loading…</span>
+          <span id="od-folders-error"  style="font-size:12px; color:#f38ba8; display:none;"></span>
+        </div>
+
+        <label class="field-label" for="od-folder-select">Upload to existing folder</label>
+        <select id="od-folder-select" style="-webkit-app-region:no-drag; width:100%; padding:8px 12px; background:#1e1e2e; border:1px solid #45475a; border-radius:8px; color:#cdd6f4; font-size:13px; outline:none; margin-bottom:12px;">
+          <option value="root">— OneDrive root (click Load Folders first) —</option>
+        </select>
+
+        <label class="field-label" for="od-new-folder-name">Or create a new folder (leave blank to use selected)</label>
+        <input type="text" id="od-new-folder-name"
+               placeholder="New folder name…"
+               style="-webkit-app-region:no-drag; width:100%; padding:8px 12px; background:#1e1e2e; border:1px solid #45475a; border-radius:8px; color:#cdd6f4; font-size:13px; outline:none;" />
+      </div>
+    </div>
+
+    <!-- Box section — shown when box or both-box is selected -->
+    <div id="box-config" style="display:none; margin-top:16px;">
+
+      <!-- Box connection status -->
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:14px; flex-wrap:wrap;">
+        <div id="box-status-badge" class="unauthed">
+          <span class="dot"></span>
+          <span id="box-status-text">Not connected to Box</span>
+        </div>
+        <button id="btn-connect-box" style="-webkit-app-region:no-drag; background:#45475a; color:#cdd6f4; padding:7px 16px; border:none; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;">
+          Connect to Box
+        </button>
+        <button id="btn-disconnect-box" style="-webkit-app-region:no-drag; background:#313244; color:#f38ba8; padding:7px 16px; border:1px solid #45475a; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer; display:none;">
+          Disconnect
+        </button>
+      </div>
+
+      <!-- Pending enablement notice — shown until Box is connected -->
+      <div id="box-pending-notice" style="background:#2a1f0a; border:1px solid #f9e2af44; border-radius:8px; padding:10px 14px; margin-bottom:14px; font-size:12px; color:#f9e2af; line-height:1.6;">
+        ⏳ <strong>IBM Box app pending admin approval.</strong><br/>
+        Ask your IBM Box admin to enable app <strong>"Outlook Extractor"</strong> (ID: 2625864)
+        in the Admin Console → Apps → Custom Apps Manager.<br/>
+        Once enabled, click <strong>Connect to Box</strong> to authenticate via your IBM w3id.
+      </div>
+
+      <!-- Box folder picker — shown only when connected -->
+      <div id="box-folder-picker" style="display:none;">
+        <p class="section-title" style="margin-bottom:8px;">Box folder</p>
+
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+          <button id="btn-load-box-folders" style="-webkit-app-region:no-drag; background:#f9e2af; color:#1e1e2e; padding:7px 14px; border:none; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;">
+            📂 Load Box Folders
+          </button>
+          <span id="box-folders-status" style="font-size:12px; color:#89b4fa; display:none;">Loading…</span>
+          <span id="box-folders-error"  style="font-size:12px; color:#f38ba8; display:none;"></span>
+        </div>
+
+        <label class="field-label" for="box-folder-select">Upload to existing folder</label>
+        <select id="box-folder-select" style="-webkit-app-region:no-drag; width:100%; padding:8px 12px; background:#1e1e2e; border:1px solid #45475a; border-radius:8px; color:#cdd6f4; font-size:13px; outline:none; margin-bottom:12px;">
+          <option value="0">— root (click Load Box Folders first) —</option>
+        </select>
+
+        <label class="field-label" for="box-new-folder-name">Or create a new folder (leave blank to use selected)</label>
+        <input type="text" id="box-new-folder-name"
+               placeholder="New folder name…"
+               style="-webkit-app-region:no-drag; width:100%; padding:8px 12px; background:#1e1e2e; border:1px solid #45475a; border-radius:8px; color:#cdd6f4; font-size:13px; outline:none;" />
+      </div>
+    </div>
+  </div>
+
   <!-- ── Date + run card ── -->
   <div class="card">
     <label class="field-label" for="since-date">Scan emails since (optional)</label>
@@ -708,6 +826,7 @@
     let lastOutputPath = "";
     let cachedFolderTree = [];
     let selectedFormat = "recipients-csv";
+    let selectedDestination = "local";   // "local" | "box" | "onedrive" | "both-box" | "both-od"
 
     // ── Format selector ───────────────────────────────────────────────────────
     document.querySelectorAll(".format-btn").forEach((btn) => {
@@ -840,6 +959,8 @@
         btnLoadFolders.disabled = true;
         btnExtract.disabled = true;
       }
+      // OneDrive shares the Microsoft token — keep its badge in sync
+      if (typeof updateOdStatus === "function") updateOdStatus(authed);
     }
 
     // ── Log helpers ───────────────────────────────────────────────────────────
@@ -1024,7 +1145,7 @@
 
       api.onProgress(msg => appendLog(msg, classifyLine(msg)));
 
-      api.onDone((outputPath, count, format) => {
+      api.onDone(async (outputPath, count, format) => {
         btnExtract.disabled = false;
         btnConnect.disabled = false;
         btnLoadFolders.disabled = false;
@@ -1052,6 +1173,32 @@
         resultMsg.className = "ok";
         resultMsg.textContent = "✅ Done — " + base + (zipped ? " (ZIP)" : "");
         appendLog("Saved → " + outputPath, "ok");
+
+        // ── Box upload (if destination is "box" or "both-box") ───────────────
+        if ((selectedDestination === "box" || selectedDestination === "both-box") && outputPath) {
+          const boxFolderId   = document.getElementById("box-folder-select").value || "0";
+          const newFolderName = document.getElementById("box-new-folder-name").value.trim();
+          appendLog("☁️  Uploading to Box…", "info");
+          const boxResult = await api.uploadToBox({ localPath: outputPath, boxFolderId, newFolderName: newFolderName || undefined });
+          if (boxResult.error) {
+            appendLog("❌ Box upload failed: " + boxResult.error, "err");
+          } else {
+            appendLog(`☁️  Uploaded to Box: ${boxResult.boxFileName}`, "ok");
+          }
+        }
+
+        // ── OneDrive upload (if destination is "onedrive" or "both-od") ──────
+        if ((selectedDestination === "onedrive" || selectedDestination === "both-od") && outputPath) {
+          const odFolderId    = document.getElementById("od-folder-select").value || "root";
+          const newFolderName = document.getElementById("od-new-folder-name").value.trim();
+          appendLog("🔵  Uploading to OneDrive…", "info");
+          const odResult = await api.uploadToOneDrive({ localPath: outputPath, oneDriveFolderId: odFolderId, newFolderName: newFolderName || undefined });
+          if (odResult.error) {
+            appendLog("❌ OneDrive upload failed: " + odResult.error, "err");
+          } else {
+            appendLog(`🔵  Uploaded to OneDrive: ${odResult.odFileName}`, "ok");
+          }
+        }
       });
 
       api.onError(msg => {
@@ -1075,6 +1222,184 @@
     // ── Open output ───────────────────────────────────────────────────────────
     btnOpenOutput.addEventListener("click", () => {
       if (lastOutputPath) api.openFile(lastOutputPath);
+    });
+
+    // ── Destination toggle ────────────────────────────────────────────────────
+    const boxConfig        = document.getElementById("box-config");
+    const boxPendingNotice = document.getElementById("box-pending-notice");
+    const boxFolderPicker  = document.getElementById("box-folder-picker");
+    const boxStatusBadge   = document.getElementById("box-status-badge");
+    const boxStatusText    = document.getElementById("box-status-text");
+    const btnConnectBox    = document.getElementById("btn-connect-box");
+    const btnDisconnectBox = document.getElementById("btn-disconnect-box");
+    const odConfig         = document.getElementById("onedrive-config");
+    const odStatusBadge    = document.getElementById("od-status-badge");
+    const odStatusText     = document.getElementById("od-status-text");
+    const btnConnectOd     = document.getElementById("btn-connect-od");
+    const btnDisconnectOd  = document.getElementById("btn-disconnect-od");
+    let boxConnected = false;
+
+    function setBoxConnected(connected) {
+      boxConnected = connected;
+      if (connected) {
+        boxStatusBadge.className = "authed";
+        boxStatusText.textContent = "Connected to Box";
+        btnConnectBox.textContent = "Reconnect";
+        btnDisconnectBox.style.display = "inline-block";
+        boxPendingNotice.style.display = "none";
+        boxFolderPicker.style.display  = "block";
+      } else {
+        boxStatusBadge.className = "unauthed";
+        boxStatusText.textContent = "Not connected to Box";
+        btnConnectBox.textContent = "Connect to Box";
+        btnDisconnectBox.style.display = "none";
+        boxPendingNotice.style.display = "block";
+        boxFolderPicker.style.display  = "none";
+      }
+    }
+
+    function updateOdStatus(connected) {
+      odStatusBadge.className       = connected ? "authed" : "unauthed";
+      odStatusText.textContent      = connected ? "Connected to OneDrive" : "Not connected to OneDrive";
+      btnConnectOd.textContent      = connected ? "Reconnect" : "Connect to OneDrive";
+      btnDisconnectOd.style.display = connected ? "inline-block" : "none";
+    }
+
+    function updateDestinationVisibility() {
+      const dest = selectedDestination;
+      boxConfig.style.display      = (dest === "box"      || dest === "both-box") ? "block" : "none";
+      odConfig.style.display       = (dest === "onedrive" || dest === "both-od")  ? "block" : "none";
+    }
+
+    document.querySelectorAll(".dest-btn").forEach((btn) => {
+      btn.addEventListener("click", async () => {
+        document.querySelectorAll(".dest-btn").forEach(b => b.classList.remove("active"));
+        btn.classList.add("active");
+        selectedDestination = btn.dataset.dest;
+        updateDestinationVisibility();
+        // Auto-check OneDrive connection status when OD is selected
+        if (selectedDestination === "onedrive" || selectedDestination === "both-od") {
+          const { connected } = await api.getOneDriveStatus();
+          updateOdStatus(connected);
+        }
+      });
+    });
+
+    btnConnectBox.addEventListener("click", async () => {
+      btnConnectBox.disabled = true;
+      btnConnectBox.textContent = "Connecting…";
+      appendLog("Opening Box login…", "info");
+      logCard.style.display = "block";
+      const result = await api.connectBox();
+      btnConnectBox.disabled = false;
+      if (result.error) {
+        appendLog("❌ Box login failed: " + result.error, "err");
+        setBoxConnected(false);
+      } else {
+        appendLog("☁️  Box connected.", "ok");
+        setBoxConnected(true);
+      }
+    });
+
+    btnDisconnectBox.addEventListener("click", async () => {
+      await api.boxLogout();
+      setBoxConnected(false);
+      appendLog("☁️  Box disconnected.", "info");
+      logCard.style.display = "block";
+    });
+
+    // ── OneDrive connect / disconnect ─────────────────────────────────────────
+    btnConnectOd.addEventListener("click", async () => {
+      btnConnectOd.disabled = true;
+      btnConnectOd.textContent = "Connecting…";
+      appendLog("Opening Microsoft login for OneDrive…", "info");
+      logCard.style.display = "block";
+      // OneDrive reuses the Microsoft OAuth flow — same as "Connect to Microsoft"
+      const result = await api.connect();
+      btnConnectOd.disabled = false;
+      if (result.authenticated) {
+        appendLog("🔵  OneDrive connected.", "ok");
+        updateOdStatus(true);
+        // Also update the main auth badge
+        setAuthenticated(true);
+      } else {
+        appendLog("❌ OneDrive login failed.", "err");
+        updateOdStatus(false);
+      }
+    });
+
+    btnDisconnectOd.addEventListener("click", () => {
+      // Disconnecting OneDrive = clearing the Microsoft token
+      updateOdStatus(false);
+      setAuthenticated(false);
+      appendLog("🔵  OneDrive disconnected.", "info");
+      logCard.style.display = "block";
+    });
+
+    // ── Load Box folders ──────────────────────────────────────────────────────
+    const btnLoadBoxFolders  = document.getElementById("btn-load-box-folders");
+    const boxFolderSelect    = document.getElementById("box-folder-select");
+    const boxFoldersStatus   = document.getElementById("box-folders-status");
+    const boxFoldersError    = document.getElementById("box-folders-error");
+
+    btnLoadBoxFolders.addEventListener("click", async () => {
+      boxFoldersStatus.style.display = "inline";
+      boxFoldersError.style.display  = "none";
+      btnLoadBoxFolders.disabled = true;
+
+      const { folders, error } = await api.listBoxFolders();
+
+      boxFoldersStatus.style.display = "none";
+      btnLoadBoxFolders.disabled = false;
+
+      if (error) {
+        boxFoldersError.textContent = "⚠️ " + error;
+        boxFoldersError.style.display = "inline";
+        return;
+      }
+
+      // Rebuild dropdown
+      boxFolderSelect.innerHTML = `<option value="0">📦 Box root folder</option>`;
+      folders.forEach(f => {
+        const opt = document.createElement("option");
+        opt.value = f.id;
+        opt.textContent = "📁 " + f.name;
+        boxFolderSelect.appendChild(opt);
+      });
+    });
+
+    // ── OneDrive folder loader ────────────────────────────────────────────────
+    const btnLoadOdFolders = document.getElementById("btn-load-od-folders");
+    const odFolderSelect   = document.getElementById("od-folder-select");
+    const odFoldersStatus  = document.getElementById("od-folders-status");
+    const odFoldersError   = document.getElementById("od-folders-error");
+
+    btnLoadOdFolders.addEventListener("click", async () => {
+      odFoldersStatus.style.display = "inline";
+      odFoldersError.style.display  = "none";
+      btnLoadOdFolders.disabled = true;
+
+      const { folders, error } = await api.listOneDriveFolders();
+
+      odFoldersStatus.style.display = "none";
+      btnLoadOdFolders.disabled = false;
+
+      if (error) {
+        odFoldersError.textContent = "⚠️ " + error;
+        odFoldersError.style.display = "inline";
+        return;
+      }
+
+      odFolderSelect.innerHTML = `<option value="root">📁 OneDrive root</option>`;
+      folders.forEach(f => {
+        const opt = document.createElement("option");
+        opt.value = f.id;
+        opt.textContent = "📁 " + f.name;
+        odFolderSelect.appendChild(opt);
+      });
+
+      // Refresh status badge after loading folders (confirms connected)
+      updateOdStatus(true);
     });
 
     // ── Preview emails ────────────────────────────────────────────────────────
@@ -1316,6 +1641,15 @@
       document.querySelectorAll(".format-btn").forEach(b => b.classList.remove("active"));
       document.querySelector(".format-btn[data-format='recipients-csv']").classList.add("active");
       selectedFormat = "recipients-csv";
+
+      // Destination → Local (Box + OneDrive connection states preserved)
+      document.querySelectorAll(".dest-btn").forEach(b => b.classList.remove("active"));
+      document.querySelector(".dest-btn[data-dest='local']").classList.add("active");
+      selectedDestination = "local";
+      document.getElementById("box-config").style.display = "none";
+      document.getElementById("onedrive-config").style.display = "none";
+      document.getElementById("box-new-folder-name").value = "";
+      document.getElementById("od-new-folder-name").value = "";
 
       // Field chips → From, To/CC, Subject on; rest off
       const chipDefaults = { "chk-from": true, "chk-tocc": true, "chk-subject": true,

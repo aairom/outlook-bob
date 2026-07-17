@@ -35,3 +35,12 @@ extract_outlook_token.json
 
 # Bob MCP config — contains API tokens (Monday JWT, etc.)
 .bob/mcp.json
+
+# Binary / large files — never commit
+*.onnx
+*.onnx.data
+*.so
+*.dylib
+*.tgz
+*.tar.gz
+*.zip

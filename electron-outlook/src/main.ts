@@ -29,6 +29,14 @@ const GRAPH_BASE      = "https://graph.microsoft.com/v1.0";
 const EXCLUDED_DOMAIN  = process.env.EXCLUDED_DOMAIN  ?? ".ibm.com";
 const LOGIN_HINT       = process.env.LOGIN_HINT       ?? "";
 const MONDAY_BASE_URL  = process.env.MONDAY_BASE_URL  ?? "https://monday.com";
+const BOX_CLIENT_ID    = process.env.BOX_CLIENT_ID    ?? "";
+const BOX_CLIENT_SECRET= process.env.BOX_CLIENT_SECRET?? "";
+const BOX_REDIRECT_URI = process.env.BOX_REDIRECT_URI ?? "http://localhost:8766";
+const BOX_REDIRECT_PORT= parseInt(new URL(BOX_REDIRECT_URI).port || "8766", 10);
+const BOX_API_BASE     = "https://api.box.com/2.0";
+const BOX_UPLOAD_BASE  = "https://upload.box.com/api/2.0";
+const BOX_AUTH_BASE    = "https://ibm.ent.box.com";
+const ONEDRIVE_BASE    = "https://graph.microsoft.com/v1.0/me/drive";
 
 function getTokenCacheFile(): string {
   return path.join(app.getPath("home"), ".cache", "extract_outlook_token_folder.json");
@@ -1357,6 +1365,445 @@ ipcMain.handle("create-monday-item", async (_event, args: { boardId: string; ite
     return { item: result.data?.create_item ?? null };
   } catch (err) {
     return { item: null, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+// ── Box integration ───────────────────────────────────────────────────────────
+
+// Box token cache — separate file from Microsoft token
+function getBoxTokenCacheFile(): string {
+  return path.join(app.getPath("home"), ".cache", "extract_box_token.json");
+}
+
+function loadBoxTokenCache(): TokenCache | null {
+  try {
+    if (fs.existsSync(getBoxTokenCacheFile()))
+      return JSON.parse(fs.readFileSync(getBoxTokenCacheFile(), "utf-8")) as TokenCache;
+  } catch { /* corrupt */ }
+  return null;
+}
+
+function saveBoxTokenCache(cache: TokenCache): void {
+  fs.mkdirSync(path.dirname(getBoxTokenCacheFile()), { recursive: true });
+  fs.writeFileSync(getBoxTokenCacheFile(), JSON.stringify(cache, null, 2), "utf-8");
+}
+
+function clearBoxTokenCache(): void {
+  try { if (fs.existsSync(getBoxTokenCacheFile())) fs.unlinkSync(getBoxTokenCacheFile()); } catch { /* ignore */ }
+}
+
+async function getBoxAccessToken(): Promise<string | null> {
+  const cache = loadBoxTokenCache();
+  if (!cache) return null;
+  if (Date.now() < cache.expires_at) return cache.access_token;
+  // Refresh using refresh_token
+  if (cache.refresh_token) {
+    try {
+      const raw = await httpsPost(
+        `${BOX_AUTH_BASE}/api/oauth2/token`,
+        new URLSearchParams({
+          grant_type: "refresh_token",
+          refresh_token: cache.refresh_token,
+          client_id: BOX_CLIENT_ID,
+          client_secret: BOX_CLIENT_SECRET,
+        }).toString(),
+        { "Content-Type": "application/x-www-form-urlencoded" }
+      );
+      const json = JSON.parse(raw);
+      if (!json.access_token) { clearBoxTokenCache(); return null; }
+      const newCache: TokenCache = {
+        access_token:  json.access_token,
+        refresh_token: json.refresh_token ?? cache.refresh_token,
+        expires_at:    Date.now() + (json.expires_in ?? 3600) * 1000 - 60_000,
+        scope:         json.scope ?? "",
+      };
+      saveBoxTokenCache(newCache);
+      return newCache.access_token;
+    } catch { clearBoxTokenCache(); return null; }
+  }
+  return null;
+}
+
+async function authenticateBoxInteractive(onProgress: (msg: string) => void): Promise<string> {
+  if (!BOX_CLIENT_ID) throw new Error("BOX_CLIENT_ID is not set in .env — add your Box app credentials.");
+  if (!BOX_CLIENT_SECRET) throw new Error("BOX_CLIENT_SECRET is not set in .env — add your Box app credentials.");
+
+  const state   = b64url(crypto.randomBytes(16));
+  const authUrl = new URL(`${BOX_AUTH_BASE}/api/oauth2/authorize`);
+  authUrl.searchParams.set("client_id",     BOX_CLIENT_ID);
+  authUrl.searchParams.set("response_type", "code");
+  authUrl.searchParams.set("redirect_uri",  BOX_REDIRECT_URI);
+  authUrl.searchParams.set("state",         state);
+
+  onProgress("Opening browser for Box authentication (IBM w3id)…");
+
+  const { code, receivedState } = await new Promise<{ code: string; receivedState: string }>(
+    (resolve, reject) => {
+      let done = false;
+      const server = http.createServer((req, res) => {
+        if (!req.url) { res.writeHead(400); res.end(); return; }
+        const cb     = new URL(req.url, BOX_REDIRECT_URI);
+        const code   = cb.searchParams.get("code");
+        const error  = cb.searchParams.get("error");
+        const rState = cb.searchParams.get("state") ?? "";
+        const html = code
+          ? "<html><body><h2 style='font-family:sans-serif;color:#107c10;margin:48px auto;max-width:480px'>✅ Box authentication successful. You can close this tab.</h2></body></html>"
+          : "<html><body><h2 style='font-family:sans-serif;color:#d13438;margin:48px auto;max-width:480px'>❌ Box authentication error. Return to the app.</h2></body></html>";
+        res.writeHead(200, { "Content-Type": "text/html; charset=utf-8" });
+        res.end(html);
+        server.close();
+        if (!done) {
+          done = true;
+          code ? resolve({ code, receivedState: rState })
+               : reject(new Error(cb.searchParams.get("error_description") ?? error ?? "Unknown Box OAuth error"));
+        }
+      });
+      server.listen(BOX_REDIRECT_PORT, "localhost", () => shell.openExternal(authUrl.toString()));
+      server.on("error", (e) => { if (!done) { done = true; reject(e); } });
+      setTimeout(() => {
+        if (!done) { done = true; server.close(); reject(new Error("Box authentication timed out (2 minutes).")); }
+      }, 120_000);
+    }
+  );
+
+  if (receivedState !== state) throw new Error("Box OAuth state mismatch — possible CSRF.");
+  onProgress("Exchanging Box authorization code for tokens…");
+
+  const raw = await httpsPost(
+    `${BOX_AUTH_BASE}/api/oauth2/token`,
+    new URLSearchParams({
+      grant_type:    "authorization_code",
+      code,
+      client_id:     BOX_CLIENT_ID,
+      client_secret: BOX_CLIENT_SECRET,
+      redirect_uri:  BOX_REDIRECT_URI,
+    }).toString(),
+    { "Content-Type": "application/x-www-form-urlencoded" }
+  );
+  const json = JSON.parse(raw);
+  if (!json.access_token) throw new Error(`Box token exchange failed: ${JSON.stringify(json)}`);
+
+  const cache: TokenCache = {
+    access_token:  json.access_token,
+    refresh_token: json.refresh_token,
+    expires_at:    Date.now() + (json.expires_in ?? 3600) * 1000 - 60_000,
+    scope:         json.scope ?? "",
+  };
+  saveBoxTokenCache(cache);
+  onProgress("☁️  Box authenticated successfully.");
+  return cache.access_token;
+}
+
+/** Low-level authenticated GET against api.box.com */
+function boxGet(token: string, urlPath: string): Promise<unknown> {
+  return new Promise((resolve, reject) => {
+    const u = new URL(`${BOX_API_BASE}${urlPath}`);
+    const req = https.request(
+      { hostname: u.hostname, path: u.pathname + u.search, method: "GET",
+        headers: { Authorization: `Bearer ${token}`, Accept: "application/json" } },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          if (res.statusCode === 401) {
+            reject(new Error("Box token expired — click 'Connect to Box' to re-authenticate."));
+            return;
+          }
+          if (res.statusCode && res.statusCode >= 400) { reject(new Error(`Box HTTP ${res.statusCode}: ${data}`)); return; }
+          try { resolve(JSON.parse(data)); } catch { resolve(data); }
+        });
+      }
+    );
+    req.on("error", reject);
+    req.end();
+  });
+}
+
+/** List immediate folder children of a Box folder (default: root = "0") */
+async function boxListFolders(token: string, parentId = "0"): Promise<Array<{ id: string; name: string }>> {
+  const data = (await boxGet(token, `/folders/${parentId}/items?fields=id,name,type&limit=1000`)) as {
+    entries: Array<{ id: string; name: string; type: string }>;
+  };
+  return (data.entries ?? []).filter((e) => e.type === "folder").map((e) => ({ id: e.id, name: e.name }));
+}
+
+/** Create a new Box folder under parentId, returns the new folder's id */
+async function boxCreateFolder(token: string, name: string, parentId: string): Promise<string> {
+  const body = JSON.stringify({ name, parent: { id: parentId } });
+  const raw = await httpsPost(
+    `${BOX_API_BASE}/folders`,
+    body,
+    { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" }
+  );
+  const json = JSON.parse(raw);
+  if (!json.id) throw new Error(`Box folder creation failed: ${raw}`);
+  return String(json.id);
+}
+
+/** Upload a local file to a Box folder via multipart/form-data */
+function boxUploadFile(
+  token: string,
+  localPath: string,
+  boxFolderId: string,
+  onProgress: (msg: string) => void
+): Promise<{ id: string; name: string }> {
+  return new Promise((resolve, reject) => {
+    const fileName = path.basename(localPath);
+    let fileBuffer: Buffer;
+    try { fileBuffer = fs.readFileSync(localPath); }
+    catch { reject(new Error(`Cannot read local file: ${localPath}`)); return; }
+
+    const boundary  = `----BoxUploadBoundary${crypto.randomBytes(8).toString("hex")}`;
+    const attributes = JSON.stringify({ name: fileName, parent: { id: boxFolderId } });
+    const part1 = Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="attributes"\r\nContent-Type: application/json\r\n\r\n${attributes}\r\n`
+    );
+    const part2Header = Buffer.from(
+      `--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="${fileName}"\r\nContent-Type: application/octet-stream\r\n\r\n`
+    );
+    const part2Footer = Buffer.from(`\r\n--${boundary}--\r\n`);
+    const bodyBuffer  = Buffer.concat([part1, part2Header, fileBuffer, part2Footer]);
+
+    const u = new URL(`${BOX_UPLOAD_BASE}/files/content`);
+    onProgress(`☁️  Uploading ${fileName} to Box…`);
+    const req = https.request(
+      { hostname: u.hostname, path: u.pathname + u.search, method: "POST",
+        headers: {
+          Authorization:   `Bearer ${token}`,
+          "Content-Type":  `multipart/form-data; boundary=${boundary}`,
+          "Content-Length": bodyBuffer.byteLength,
+        }
+      },
+      (res) => {
+        let data = "";
+        res.on("data", (c) => (data += c));
+        res.on("end", () => {
+          if (res.statusCode === 401) {
+            reject(new Error("Box token expired — click 'Connect to Box' to re-authenticate."));
+            return;
+          }
+          if (res.statusCode && res.statusCode >= 400) { reject(new Error(`Box upload failed HTTP ${res.statusCode}: ${data}`)); return; }
+          try {
+            const json  = JSON.parse(data);
+            const entry = json?.entries?.[0] ?? json;
+            resolve({ id: String(entry.id ?? ""), name: String(entry.name ?? fileName) });
+          } catch { reject(new Error(`Box upload response parse error: ${data}`)); }
+        });
+      }
+    );
+    req.on("error", reject);
+    req.write(bodyBuffer);
+    req.end();
+  });
+}
+
+// ── Box IPC handlers ──────────────────────────────────────────────────────────
+
+ipcMain.handle("connect-box", async () => {
+  const onProgress = (msg: string) => send("progress", { message: msg });
+  try {
+    await authenticateBoxInteractive(onProgress);
+    return { connected: true };
+  } catch (err) {
+    return { connected: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+ipcMain.handle("box-logout", async () => {
+  clearBoxTokenCache();
+});
+
+ipcMain.handle("get-box-status", async () => {
+  const token = await getBoxAccessToken();
+  return { connected: token !== null };
+});
+
+ipcMain.handle("list-box-folders", async () => {
+  try {
+    let token = await getBoxAccessToken();
+    if (!token) return { folders: [], error: "Not connected to Box — click 'Connect to Box' first." };
+    const folders = await boxListFolders(token);
+    return { folders };
+  } catch (err) {
+    return { folders: [], error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+ipcMain.handle("upload-to-box", async (
+  _event,
+  args: { localPath: string; boxFolderId: string; newFolderName?: string }
+) => {
+  const onProgress = (msg: string) => send("progress", { message: msg });
+  try {
+    let token = await getBoxAccessToken();
+    if (!token) return { boxFileId: "", boxFileName: "", error: "Not connected to Box — click 'Connect to Box' first." };
+    let targetFolderId = args.boxFolderId;
+    if (args.newFolderName?.trim()) {
+      onProgress(`📁 Creating Box folder "${args.newFolderName}"…`);
+      targetFolderId = await boxCreateFolder(token, args.newFolderName.trim(), args.boxFolderId);
+      onProgress(`📁 Box folder created.`);
+    }
+    const result = await boxUploadFile(token, args.localPath, targetFolderId, onProgress);
+    onProgress(`☁️  Upload complete: ${result.name}`);
+    return { boxFileId: result.id, boxFileName: result.name };
+  } catch (err) {
+    return { boxFileId: "", boxFileName: "", error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+// ── OneDrive integration ──────────────────────────────────────────────────────
+// OneDrive reuses the existing Microsoft access token (getAccessTokenSilent).
+// No new OAuth flow — the user is already authenticated via "Connect to Microsoft".
+
+/** List OneDrive folders inside a given item path (default: root) */
+async function oneDriveListFolders(
+  token: string, parentPath = "root"
+): Promise<Array<{ id: string; name: string; path: string }>> {
+  const url = parentPath === "root"
+    ? `${ONEDRIVE_BASE}/root/children?$filter=folder ne null&$select=id,name,folder,parentReference&$top=200`
+    : `${ONEDRIVE_BASE}/items/${parentPath}/children?$filter=folder ne null&$select=id,name,folder,parentReference&$top=200`;
+  const raw = JSON.parse(await httpsGet(url, {
+    Authorization: `Bearer ${token}`, Accept: "application/json",
+  })) as { value: Array<Record<string, unknown>>; error?: Record<string, unknown> };
+  if (raw.error) throw new Error(`OneDrive list error: ${JSON.stringify(raw.error)}`);
+  return (raw.value ?? []).map((item) => ({
+    id:   String(item["id"]   ?? ""),
+    name: String(item["name"] ?? ""),
+    path: String((item["parentReference"] as Record<string,string> | undefined)?.["path"] ?? "") + "/" + String(item["name"] ?? ""),
+  }));
+}
+
+/** Create a OneDrive folder under a parent item id, returns new item id */
+async function oneDriveCreateFolder(
+  token: string, name: string, parentId: string
+): Promise<string> {
+  const url  = `${ONEDRIVE_BASE}/items/${parentId}/children`;
+  const body = JSON.stringify({ name, folder: {}, "@microsoft.graph.conflictBehavior": "rename" });
+  const raw  = await httpsPost(url, body, {
+    Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json",
+  });
+  const json = JSON.parse(raw);
+  if (!json.id) throw new Error(`OneDrive folder creation failed: ${raw}`);
+  return String(json.id);
+}
+
+/** Upload a file to OneDrive using the simple upload API (files up to 4 MB) or resumable session */
+async function oneDriveUploadFile(
+  token: string,
+  localPath: string,
+  parentId: string,
+  onProgress: (msg: string) => void
+): Promise<{ id: string; name: string; webUrl: string }> {
+  const fileName   = path.basename(localPath);
+  const fileBuffer = fs.readFileSync(localPath);
+  const fileSize   = fileBuffer.byteLength;
+  onProgress(`🔵  Uploading ${fileName} to OneDrive…`);
+
+  if (fileSize <= 4 * 1024 * 1024) {
+    // Simple upload for files ≤ 4 MB
+    const url = `${ONEDRIVE_BASE}/items/${parentId}:/${encodeURIComponent(fileName)}:/content`;
+    const raw = await new Promise<string>((resolve, reject) => {
+      const u = new URL(url);
+      const req = https.request(
+        { hostname: u.hostname, path: u.pathname + u.search, method: "PUT",
+          headers: { Authorization: `Bearer ${token}`, "Content-Type": "application/octet-stream",
+                     "Content-Length": fileSize } },
+        (res) => {
+          let data = "";
+          res.on("data", (c) => (data += c));
+          res.on("end", () => {
+            if (res.statusCode === 401) { reject(new Error("OneDrive token expired — click 'Connect to Microsoft' to re-authenticate.")); return; }
+            if (res.statusCode && res.statusCode >= 400) { reject(new Error(`OneDrive upload failed HTTP ${res.statusCode}: ${data}`)); return; }
+            resolve(data);
+          });
+        }
+      );
+      req.on("error", reject);
+      req.write(fileBuffer);
+      req.end();
+    });
+    const json = JSON.parse(raw);
+    return { id: String(json.id ?? ""), name: String(json.name ?? fileName), webUrl: String(json.webUrl ?? "") };
+  }
+
+  // Resumable upload session for files > 4 MB
+  const sessionUrl = `${ONEDRIVE_BASE}/items/${parentId}:/${encodeURIComponent(fileName)}:/createUploadSession`;
+  const sessionRaw = await httpsPost(sessionUrl,
+    JSON.stringify({ item: { "@microsoft.graph.conflictBehavior": "rename", name: fileName } }),
+    { Authorization: `Bearer ${token}`, "Content-Type": "application/json", Accept: "application/json" }
+  );
+  const uploadUrl = JSON.parse(sessionRaw).uploadUrl as string;
+  if (!uploadUrl) throw new Error("OneDrive: failed to create upload session.");
+
+  const chunkSize = 3.2 * 1024 * 1024; // 3.2 MB chunks (must be multiple of 320 KiB)
+  let offset = 0;
+  let lastJson: Record<string, unknown> = {};
+  while (offset < fileSize) {
+    const end   = Math.min(offset + chunkSize, fileSize);
+    const chunk = fileBuffer.slice(offset, end);
+    onProgress(`🔵  OneDrive upload: ${Math.round((end / fileSize) * 100)}%…`);
+    const chunkRaw = await new Promise<string>((resolve, reject) => {
+      const u = new URL(uploadUrl);
+      const req = https.request(
+        { hostname: u.hostname, path: u.pathname + u.search, method: "PUT",
+          headers: { "Content-Length": chunk.byteLength,
+                     "Content-Range": `bytes ${offset}-${end - 1}/${fileSize}` } },
+        (res) => {
+          let data = "";
+          res.on("data", (c) => (data += c));
+          res.on("end", () => {
+            if (res.statusCode && res.statusCode >= 400) { reject(new Error(`OneDrive chunk upload HTTP ${res.statusCode}: ${data}`)); return; }
+            resolve(data);
+          });
+        }
+      );
+      req.on("error", reject);
+      req.write(chunk);
+      req.end();
+    });
+    if (chunkRaw) { try { lastJson = JSON.parse(chunkRaw); } catch { /* partial response */ } }
+    offset = end;
+  }
+  return { id: String(lastJson["id"] ?? ""), name: String(lastJson["name"] ?? fileName), webUrl: String(lastJson["webUrl"] ?? "") };
+}
+
+// ── OneDrive IPC handlers ─────────────────────────────────────────────────────
+
+ipcMain.handle("get-onedrive-status", async () => {
+  const token = await getAccessTokenSilent();
+  return { connected: token !== null };
+});
+
+ipcMain.handle("list-onedrive-folders", async () => {
+  try {
+    const token = await getAccessTokenSilent();
+    if (!token) return { folders: [], error: "Not connected to Microsoft — click 'Connect to Microsoft' first." };
+    const folders = await oneDriveListFolders(token, "root");
+    return { folders };
+  } catch (err) {
+    return { folders: [], error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
+ipcMain.handle("upload-to-onedrive", async (
+  _event,
+  args: { localPath: string; oneDriveFolderId: string; newFolderName?: string }
+) => {
+  const onProgress = (msg: string) => send("progress", { message: msg });
+  try {
+    const token = await getAccessTokenSilent();
+    if (!token) return { odFileId: "", odFileName: "", odWebUrl: "", error: "Not connected to Microsoft — click 'Connect to Microsoft' first." };
+    let targetId = args.oneDriveFolderId;
+    if (args.newFolderName?.trim()) {
+      onProgress(`📁 Creating OneDrive folder "${args.newFolderName}"…`);
+      targetId = await oneDriveCreateFolder(token, args.newFolderName.trim(), args.oneDriveFolderId);
+      onProgress(`📁 OneDrive folder created.`);
+    }
+    const result = await oneDriveUploadFile(token, args.localPath, targetId, onProgress);
+    onProgress(`🔵  OneDrive upload complete: ${result.name}`);
+    return { odFileId: result.id, odFileName: result.name, odWebUrl: result.webUrl };
+  } catch (err) {
+    return { odFileId: "", odFileName: "", odWebUrl: "", error: err instanceof Error ? err.message : String(err) };
   }
 });
 

@@ -158,6 +158,63 @@ Copy `.env.example` to `.env` at the project root. All fields are optional — d
 | `EXCLUDED_DOMAIN` | `.ibm.com` | Default domain to pre-fill in the "Exclude addresses" field (can be changed in the UI) |
 | `REDIRECT_URI` | `http://localhost:8765` | OAuth callback URI (must match Azure registration if using your own) |
 | `LOGIN_HINT` | _(empty)_ | Microsoft account email to pre-select at sign-in |
+| `BOX_TOKEN` | _(empty)_ | Box Developer Token — required to enable Box upload destination |
+
+## Cloud Upload — Box & OneDrive
+
+The **Output Destination** card lets you choose where extraction output is saved:
+
+| Selection | Behaviour |
+|---|---|
+| 💻 **Local** | Saved to `electron-outlook/output/` only (default) |
+| ☁️ **Box** | Uploaded to IBM Enterprise Box only |
+| 🔵 **OneDrive** | Uploaded to your OneDrive only |
+| 💻+☁️ **Both (Box)** | Saved locally AND uploaded to Box |
+| 💻+🔵 **Both (OneDrive)** | Saved locally AND uploaded to OneDrive |
+
+---
+
+## Box Integration
+
+The app can upload extraction output directly to an **IBM Enterprise Box** (`ibm.ent.box.com`) folder.
+
+### Setup
+
+1. Go to [ibm.ent.box.com/developers/console](https://ibm.ent.box.com/developers/console) → create a **Custom App** → **User Authentication (OAuth 2.0)**
+2. Set Redirect URI to `http://localhost:8766`
+3. Add credentials to `.env`:
+   ```
+   BOX_CLIENT_ID=your_client_id
+   BOX_CLIENT_SECRET=your_client_secret
+   BOX_REDIRECT_URI=http://localhost:8766
+   ```
+4. Ask your IBM Box admin to **enable** the app in Admin Console → Apps → Custom Apps Manager
+
+> Once enabled, click **Connect to Box** in the app — your browser opens IBM Box login (w3id).
+> The token is cached and auto-refreshed. A pending notice is shown in the UI until the admin approves.
+
+### How it works
+
+When **☁️ Box** or **💻+☁️ Both (Box)** is selected:
+- Click **📂 Load Box Folders** to fetch your root-level Box folders
+- Select an existing folder, **or** type a new folder name to create one
+- After extraction, the file is uploaded automatically: `☁️ Uploaded to Box: <filename>`
+
+---
+
+## OneDrive Integration
+
+OneDrive upload reuses the **existing Microsoft token** — no extra setup or credentials needed.
+
+### How it works
+
+When **🔵 OneDrive** or **💻+🔵 Both (OneDrive)** is selected:
+- Connect to Microsoft first (the standard **Connect to Microsoft** button)
+- Click **📂 Load OneDrive Folders** to fetch your root-level OneDrive folders
+- Select an existing folder, **or** type a new folder name to create one
+- After extraction, the file is uploaded: `🔵 Uploaded to OneDrive: <filename>`
+
+Supports files up to 4 MB via simple upload, and larger files via resumable chunked upload automatically.
 
 ### Monday.com token (`.bob/mcp.json`)
 

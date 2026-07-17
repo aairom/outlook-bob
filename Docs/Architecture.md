@@ -14,9 +14,21 @@ directly from the main process using the token stored in `.bob/mcp.json`.
 A sixth **Preview** format lets you browse emails directly on-screen (up to 200) without
 writing any file — messages appear in a scrollable list with a reading pane and live search.
 
+The **Output Destination** card lets users choose where extracted files go:
+- 💻 **Local only** (default) — saved to `electron-outlook/output/`
+- ☁️ **Box only** — uploaded to IBM Enterprise Box (`ibm.ent.box.com`) via OAuth 2.0
+- 🔵 **OneDrive only** — uploaded to the user's OneDrive via Microsoft Graph API (reuses existing Microsoft token)
+- 💻+☁️ **Both (Box)** — saved locally and uploaded to Box
+- 💻+🔵 **Both (OneDrive)** — saved locally and uploaded to OneDrive
+
+Box authentication uses a dedicated OAuth 2.0 Authorization Code flow (no PKCE — Box standard),
+separate from the Microsoft token, cached at `~/.cache/extract_box_token.json`.
+The Box app (`BOX_CLIENT_ID` / `BOX_CLIENT_SECRET`) must be enabled by an IBM Box admin
+before the Connect to Box button will succeed.
+
 All UI state (format selection, field toggles, filters, date, ZIP option) is reset
 to defined defaults on every app launch via an explicit `resetUI()` call in the boot
-sequence — no state is persisted between sessions.
+sequence — no state is persisted between sessions. Box connection state is preserved.
 
 ```mermaid
 flowchart TD
@@ -135,13 +147,18 @@ flowchart TD
 
 | Channel | Direction | Payload | Description |
 |---|---|---|---|
-| `get-status` | renderer → main | — | Check if a valid token exists |
-| `connect` | renderer → main | — | Start interactive OAuth flow |
+| `get-status` | renderer → main | — | Check if a valid Microsoft token exists |
+| `connect` | renderer → main | — | Start Microsoft interactive OAuth PKCE flow |
 | `list-folders` | renderer → main | — | Fetch full folder tree recursively |
 | `start-extraction` | renderer → main | `folderIds, folderTree, since?, exportParams` | Run export to file |
 | `preview-emails` | renderer → main | `folderIds, folderTree, since?, limit?, flaggedOnly?` | Fetch messages for on-screen display (no file written) |
 | `open-file` | renderer → main | `path` | Open file/folder with OS default app |
 | `list-monday-boards` | renderer → main | — | Fetch all Monday boards via GraphQL API |
+| `connect-box` | renderer → main | — | Start Box OAuth 2.0 browser login flow |
+| `box-logout` | renderer → main | — | Clear Box token cache |
+| `get-box-status` | renderer → main | — | Check if a valid Box token exists |
+| `list-box-folders` | renderer → main | — | List root-level Box folders |
+| `upload-to-box` | renderer → main | `localPath, boxFolderId, newFolderName?` | Upload exported file to Box folder |
 | `progress` | main → renderer | `{ message }` | Live status updates |
 | `done` | main → renderer | `{ outputPath, count, format }` | Extraction complete |
 | `error` | main → renderer | `{ message }` | Error notification |

@@ -71,6 +71,11 @@ interface PreviewMessage {
   folder: string;
 }
 
+interface BoxFolder {
+  id: string;
+  name: string;
+}
+
 contextBridge.exposeInMainWorld("electronAPI", {
   // ── Queries ────────────────────────────────────────────────────────────────
   getStatus: (): Promise<{ authenticated: boolean; mondayBaseUrl: string }> =>
@@ -122,6 +127,38 @@ contextBridge.exposeInMainWorld("electronAPI", {
     messages: PreviewMessage[];
   }): Promise<{ count: number; outputPath: string; error?: string }> =>
     ipcRenderer.invoke("download-selected-emails", args),
+
+  connectBox: (): Promise<{ connected: boolean; error?: string }> =>
+    ipcRenderer.invoke("connect-box"),
+
+  boxLogout: (): Promise<void> =>
+    ipcRenderer.invoke("box-logout"),
+
+  getBoxStatus: (): Promise<{ connected: boolean }> =>
+    ipcRenderer.invoke("get-box-status"),
+
+  listBoxFolders: (): Promise<{ folders: BoxFolder[]; error?: string }> =>
+    ipcRenderer.invoke("list-box-folders"),
+
+  uploadToBox: (args: {
+    localPath: string;
+    boxFolderId: string;
+    newFolderName?: string;
+  }): Promise<{ boxFileId: string; boxFileName: string; error?: string }> =>
+    ipcRenderer.invoke("upload-to-box", args),
+
+  getOneDriveStatus: (): Promise<{ connected: boolean }> =>
+    ipcRenderer.invoke("get-onedrive-status"),
+
+  listOneDriveFolders: (): Promise<{ folders: Array<{ id: string; name: string; path: string }>; error?: string }> =>
+    ipcRenderer.invoke("list-onedrive-folders"),
+
+  uploadToOneDrive: (args: {
+    localPath: string;
+    oneDriveFolderId: string;
+    newFolderName?: string;
+  }): Promise<{ odFileId: string; odFileName: string; odWebUrl: string; error?: string }> =>
+    ipcRenderer.invoke("upload-to-onedrive", args),
 
   // ── Events ─────────────────────────────────────────────────────────────────
   onProgress: (cb: (message: string) => void) => {
