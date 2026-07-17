@@ -159,6 +159,12 @@ flowchart TD
 | `get-box-status` | renderer → main | — | Check if a valid Box token exists |
 | `list-box-folders` | renderer → main | — | List root-level Box folders |
 | `upload-to-box` | renderer → main | `localPath, boxFolderId, newFolderName?` | Upload exported file to Box folder |
+| `get-boxdrive-status` | renderer → main | — | Detect Box Drive mount point on local filesystem |
+| `list-boxdrive-folders` | renderer → main | — | List top-level folders inside the Box Drive mount |
+| `copy-to-boxdrive` | renderer → main | `localPath, destFolderPath?, newFolderName?` | Copy exported file to Box Drive folder via `fs.copyFileSync` |
+| `get-onedrive-status` | renderer → main | — | Check if a valid Microsoft token exists (reused for OneDrive) |
+| `list-onedrive-folders` | renderer → main | — | List top-level OneDrive folders via Graph API |
+| `upload-to-onedrive` | renderer → main | `localPath, oneDriveFolderId, newFolderName?` | Upload exported file to OneDrive (chunked for large files) |
 | `progress` | main → renderer | `{ message }` | Live status updates |
 | `done` | main → renderer | `{ outputPath, count, format }` | Extraction complete |
 | `error` | main → renderer | `{ message }` | Error notification |

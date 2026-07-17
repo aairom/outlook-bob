@@ -82,12 +82,25 @@ The **Output Destination** card lets you choose where export files go:
 | Option | Requires |
 |---|---|
 | 💻 **Local** | Nothing — default |
-| ☁️ **Box** | IBM Box app approved by admin + credentials in `.env` |
+| 📦 **Box Drive** | Box Drive installed + signed in on Mac |
+| ☁️ **Box API** | IBM Box app approved by admin + credentials in `.env` |
 | 🔵 **OneDrive** | Microsoft connection only — no extra setup |
-| 💻+☁️ **Both (Box)** | Same as Box |
+| 💻+📦 **Both (Box Drive)** | Same as Box Drive |
+| 💻+☁️ **Both (Box API)** | Same as Box API |
 | 💻+🔵 **Both (OneDrive)** | Same as OneDrive |
 
-### Box upload (optional)
+### Box Drive upload (optional, zero credentials)
+
+Box Drive mounts your Box account as a local folder — no API key needed.
+
+1. Install [Box Drive](https://www.box.com/drive) and sign in with your Box account
+2. Box Drive auto-mounts at `~/Library/CloudStorage/Box-Box/` on macOS 12+
+3. Select **📦 Box Drive** or **💻+📦 Both (Box Drive)** in the Output Destination card
+4. Click **🔄 Detect** to confirm the mount is found
+5. Click **📂 Load Folders** → select a destination folder (or type a new sub-folder name)
+6. Run extraction — the file is copied into Box Drive automatically
+
+### Box API upload (optional)
 
 1. Go to [ibm.ent.box.com/developers/console](https://ibm.ent.box.com/developers/console) → create a **Custom App** → **User Authentication (OAuth 2.0)**
 2. Set Redirect URI to `http://localhost:8766`

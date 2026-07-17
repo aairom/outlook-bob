@@ -588,10 +588,48 @@
 
     <div class="dest-toggle-row">
       <button class="dest-btn active" id="dest-local"      data-dest="local"     >💻 Local</button>
-      <button class="dest-btn"        id="dest-box"        data-dest="box"       >☁️ Box</button>
+      <button class="dest-btn"        id="dest-boxdrive"   data-dest="boxdrive"  >📦 Box Drive</button>
+      <button class="dest-btn"        id="dest-box"        data-dest="box"       >☁️ Box API</button>
       <button class="dest-btn"        id="dest-onedrive"   data-dest="onedrive"  >🔵 OneDrive</button>
-      <button class="dest-btn"        id="dest-both-box"   data-dest="both-box"  >💻+☁️ Both (Box)</button>
+      <button class="dest-btn"        id="dest-both-bd"    data-dest="both-bd"   >💻+📦 Both (Box Drive)</button>
+      <button class="dest-btn"        id="dest-both-box"   data-dest="both-box"  >💻+☁️ Both (Box API)</button>
       <button class="dest-btn"        id="dest-both-od"    data-dest="both-od"   >💻+🔵 Both (OneDrive)</button>
+    </div>
+
+    <!-- Box Drive section — shown when boxdrive or both-bd is selected -->
+    <div id="boxdrive-config" style="display:none; margin-top:16px;">
+
+      <!-- Box Drive status -->
+      <div style="display:flex; align-items:center; gap:10px; margin-bottom:10px; flex-wrap:wrap;">
+        <div id="bd-status-badge" class="unauthed">
+          <span class="dot"></span>
+          <span id="bd-status-text">Detecting Box Drive…</span>
+        </div>
+        <button id="btn-refresh-boxdrive" style="-webkit-app-region:no-drag; background:#45475a; color:#cdd6f4; padding:7px 14px; border:none; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;">
+          🔄 Detect
+        </button>
+      </div>
+      <p id="bd-mount-path" style="font-size:11px; color:#6c7086; margin-bottom:12px; font-family:monospace;"></p>
+
+      <!-- Box Drive folder picker -->
+      <div id="bd-folder-picker" style="display:none;">
+        <p class="section-title" style="margin-bottom:8px;">Box Drive folder</p>
+        <div style="display:flex; gap:8px; align-items:center; flex-wrap:wrap; margin-bottom:10px;">
+          <button id="btn-load-bd-folders" style="-webkit-app-region:no-drag; background:#f9e2af; color:#1e1e2e; padding:7px 14px; border:none; border-radius:8px; font-size:12px; font-weight:500; cursor:pointer;">
+            📂 Load Folders
+          </button>
+          <span id="bd-folders-status" style="font-size:12px; color:#89b4fa; display:none;">Loading…</span>
+          <span id="bd-folders-error"  style="font-size:12px; color:#f38ba8; display:none;"></span>
+        </div>
+        <label class="field-label" for="bd-folder-select">Save into folder</label>
+        <select id="bd-folder-select" style="-webkit-app-region:no-drag; width:100%; padding:8px 12px; background:#1e1e2e; border:1px solid #45475a; border-radius:8px; color:#cdd6f4; font-size:13px; outline:none; margin-bottom:12px;">
+          <option value="">— Box Drive root (click Load Folders first) —</option>
+        </select>
+        <label class="field-label" for="bd-new-folder-name">Or create a new sub-folder (leave blank to use selected)</label>
+        <input type="text" id="bd-new-folder-name"
+               placeholder="New folder name…"
+               style="-webkit-app-region:no-drag; width:100%; padding:8px 12px; background:#1e1e2e; border:1px solid #45475a; border-radius:8px; color:#cdd6f4; font-size:13px; outline:none;" />
+      </div>
     </div>
 
     <!-- OneDrive section — shown when onedrive or both-od is selected -->
@@ -826,7 +864,7 @@
     let lastOutputPath = "";
     let cachedFolderTree = [];
     let selectedFormat = "recipients-csv";
-    let selectedDestination = "local";   // "local" | "box" | "onedrive" | "both-box" | "both-od"
+    let selectedDestination = "local";   // "local" | "boxdrive" | "box" | "onedrive" | "both-bd" | "both-box" | "both-od"
 
     // ── Format selector ───────────────────────────────────────────────────────
     document.querySelectorAll(".format-btn").forEach((btn) => {
@@ -1174,6 +1212,19 @@
         resultMsg.textContent = "✅ Done — " + base + (zipped ? " (ZIP)" : "");
         appendLog("Saved → " + outputPath, "ok");
 
+        // ── Box Drive copy (if destination is "boxdrive" or "both-bd") ───────
+        if ((selectedDestination === "boxdrive" || selectedDestination === "both-bd") && outputPath) {
+          const bdFolderId    = document.getElementById("bd-folder-select").value || "";
+          const newFolderName = document.getElementById("bd-new-folder-name").value.trim();
+          appendLog("📦  Copying to Box Drive…", "info");
+          const bdResult = await api.copyToBoxDrive({ localPath: outputPath, destFolderPath: bdFolderId, newFolderName: newFolderName || undefined });
+          if (bdResult.error) {
+            appendLog("❌ Box Drive copy failed: " + bdResult.error, "err");
+          } else {
+            appendLog(`📦  Copied to Box Drive: ${bdResult.destPath}`, "ok");
+          }
+        }
+
         // ── Box upload (if destination is "box" or "both-box") ───────────────
         if ((selectedDestination === "box" || selectedDestination === "both-box") && outputPath) {
           const boxFolderId   = document.getElementById("box-folder-select").value || "0";
@@ -1267,6 +1318,7 @@
 
     function updateDestinationVisibility() {
       const dest = selectedDestination;
+      document.getElementById("boxdrive-config").style.display = (dest === "boxdrive" || dest === "both-bd")  ? "block" : "none";
       boxConfig.style.display      = (dest === "box"      || dest === "both-box") ? "block" : "none";
       odConfig.style.display       = (dest === "onedrive" || dest === "both-od")  ? "block" : "none";
     }
@@ -1277,6 +1329,10 @@
         btn.classList.add("active");
         selectedDestination = btn.dataset.dest;
         updateDestinationVisibility();
+        // Auto-detect Box Drive when BD is selected
+        if (selectedDestination === "boxdrive" || selectedDestination === "both-bd") {
+          updateBdStatus(await api.getBoxDriveStatus());
+        }
         // Auto-check OneDrive connection status when OD is selected
         if (selectedDestination === "onedrive" || selectedDestination === "both-od") {
           const { connected } = await api.getOneDriveStatus();
@@ -1334,6 +1390,59 @@
       setAuthenticated(false);
       appendLog("🔵  OneDrive disconnected.", "info");
       logCard.style.display = "block";
+    });
+
+    // ── Box Drive detect / load folders ──────────────────────────────────────
+    const bdStatusBadge   = document.getElementById("bd-status-badge");
+    const bdStatusText    = document.getElementById("bd-status-text");
+    const bdMountPath     = document.getElementById("bd-mount-path");
+    const bdFolderPicker  = document.getElementById("bd-folder-picker");
+    const bdFolderSelect  = document.getElementById("bd-folder-select");
+    const bdFoldersStatus = document.getElementById("bd-folders-status");
+    const bdFoldersError  = document.getElementById("bd-folders-error");
+
+    function updateBdStatus({ mounted, mountPath }) {
+      if (mounted) {
+        bdStatusBadge.className    = "authed";
+        bdStatusText.textContent   = "Box Drive detected";
+        bdMountPath.textContent    = mountPath || "";
+        bdFolderPicker.style.display = "block";
+      } else {
+        bdStatusBadge.className    = "unauthed";
+        bdStatusText.textContent   = "Box Drive not found";
+        bdMountPath.textContent    = "";
+        bdFolderPicker.style.display = "none";
+      }
+    }
+
+    document.getElementById("btn-refresh-boxdrive").addEventListener("click", async () => {
+      bdStatusText.textContent = "Detecting…";
+      updateBdStatus(await api.getBoxDriveStatus());
+    });
+
+    document.getElementById("btn-load-bd-folders").addEventListener("click", async () => {
+      bdFoldersStatus.style.display = "inline";
+      bdFoldersError.style.display  = "none";
+      document.getElementById("btn-load-bd-folders").disabled = true;
+
+      const { folders, error } = await api.listBoxDriveFolders();
+
+      bdFoldersStatus.style.display = "none";
+      document.getElementById("btn-load-bd-folders").disabled = false;
+
+      if (error) {
+        bdFoldersError.textContent    = "⚠️ " + error;
+        bdFoldersError.style.display  = "inline";
+        return;
+      }
+
+      bdFolderSelect.innerHTML = `<option value="">📦 Box Drive root</option>`;
+      (folders || []).forEach(f => {
+        const opt = document.createElement("option");
+        opt.value       = f.path;
+        opt.textContent = "📁 " + f.name;
+        bdFolderSelect.appendChild(opt);
+      });
     });
 
     // ── Load Box folders ──────────────────────────────────────────────────────
@@ -1646,8 +1755,10 @@
       document.querySelectorAll(".dest-btn").forEach(b => b.classList.remove("active"));
       document.querySelector(".dest-btn[data-dest='local']").classList.add("active");
       selectedDestination = "local";
+      document.getElementById("boxdrive-config").style.display = "none";
       document.getElementById("box-config").style.display = "none";
       document.getElementById("onedrive-config").style.display = "none";
+      document.getElementById("bd-new-folder-name").value = "";
       document.getElementById("box-new-folder-name").value = "";
       document.getElementById("od-new-folder-name").value = "";
 

@@ -160,21 +160,44 @@ Copy `.env.example` to `.env` at the project root. All fields are optional — d
 | `LOGIN_HINT` | _(empty)_ | Microsoft account email to pre-select at sign-in |
 | `BOX_TOKEN` | _(empty)_ | Box Developer Token — required to enable Box upload destination |
 
-## Cloud Upload — Box & OneDrive
+## Cloud Upload — Box Drive, Box API & OneDrive
 
 The **Output Destination** card lets you choose where extraction output is saved:
 
 | Selection | Behaviour |
 |---|---|
 | 💻 **Local** | Saved to `electron-outlook/output/` only (default) |
-| ☁️ **Box** | Uploaded to IBM Enterprise Box only |
+| 📦 **Box Drive** | Copied to your locally-mounted Box Drive folder |
+| ☁️ **Box API** | Uploaded to IBM Enterprise Box via API |
 | 🔵 **OneDrive** | Uploaded to your OneDrive only |
-| 💻+☁️ **Both (Box)** | Saved locally AND uploaded to Box |
+| 💻+📦 **Both (Box Drive)** | Saved locally AND copied to Box Drive |
+| 💻+☁️ **Both (Box API)** | Saved locally AND uploaded to Box |
 | 💻+🔵 **Both (OneDrive)** | Saved locally AND uploaded to OneDrive |
 
 ---
 
-## Box Integration
+## Box Drive Integration
+
+Box Drive is installed locally on your Mac and mounts your Box account at:
+```
+~/Library/CloudStorage/Box-Box/
+```
+No OAuth, no API key — the app uses a plain `fs.copyFile` under the hood.
+
+### How it works
+
+When **📦 Box Drive** or **💻+📦 Both (Box Drive)** is selected:
+- The app auto-detects the Box Drive mount path on selection
+- Click **🔄 Detect** to re-check if Box Drive was not found
+- Click **📂 Load Folders** to list top-level folders inside Box Drive
+- Select an existing folder, **or** type a new sub-folder name to create one
+- After extraction, the file is copied: `📦 Copied to Box Drive: <path>`
+
+> Box Drive must be installed and signed in on your Mac. Download from [box.com/drive](https://www.box.com/drive).
+
+---
+
+## Box API Integration
 
 The app can upload extraction output directly to an **IBM Enterprise Box** (`ibm.ent.box.com`) folder.
 
