@@ -147,6 +147,19 @@ contextBridge.exposeInMainWorld("electronAPI", {
   }): Promise<{ boxFileId: string; boxFileName: string; error?: string }> =>
     ipcRenderer.invoke("upload-to-box", args),
 
+  getBoxDriveStatus: (): Promise<{ available: boolean; mountPath: string }> =>
+    ipcRenderer.invoke("get-boxdrive-status"),
+
+  listBoxDriveFolders: (): Promise<{ folders: Array<{ name: string; path: string }>; mountPath: string; error?: string }> =>
+    ipcRenderer.invoke("list-boxdrive-folders"),
+
+  copyToBoxDrive: (args: {
+    localPath: string;
+    boxDriveFolderPath: string;
+    newFolderName?: string;
+  }): Promise<{ destPath: string; fileName: string; error?: string }> =>
+    ipcRenderer.invoke("copy-to-boxdrive", args),
+
   getOneDriveStatus: (): Promise<{ connected: boolean }> =>
     ipcRenderer.invoke("get-onedrive-status"),
 
