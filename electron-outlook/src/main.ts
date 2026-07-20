@@ -774,6 +774,21 @@ async function runJsonExport(
 }
 
 // ── FORMAT: EML (one .eml file per message) ───────────────────────────────────
+
+/**
+ * Converts an arbitrary string into a safe file/folder name component.
+ * Replaces illegal filesystem characters with underscores, collapses runs of
+ * underscores, and caps length at `maxLen` characters.
+ */
+function safeName(value: string, maxLen = 64): string {
+  return value
+    .replace(/[/\\:*?"<>|@\s]+/g, "_")   // illegal chars + whitespace → _
+    .replace(/_+/g, "_")                  // collapse consecutive underscores
+    .replace(/^_|_$/g, "")               // trim leading/trailing underscores
+    .substring(0, maxLen)
+    || "unknown";
+}
+
 function buildEml(msg: Record<string, unknown>, folderName: string): string {
   const fromEa = ((msg["from"] as Record<string,unknown>|undefined)?.["emailAddress"] as Record<string,string>|undefined) ?? {};
   const { name: fromName, email: fromEmail } = extractAddress(fromEa);
@@ -839,10 +854,16 @@ async function runEmlExport(
       const { email: fromEmail } = extractAddress(fromEa);
       if (params.filterExcludedDomain && fromEmail && isExcluded(fromEmail, params.excludedDomain)) continue;
 
-      const sentRaw = String(msg["sentDateTime"] ?? "");
-      const safeDate = sentRaw ? sentRaw.replace(/[:/\s]/g, "-").substring(0, 19) : `msg_${count}`;
-      const safeId   = String(msg["id"] ?? count).replace(/[/\\:*?"<>|]/g, "").substring(0, 32);
-      fs.writeFileSync(path.join(folderDir, `${safeDate}_${safeId}.eml`),
+      const sentRaw    = String(msg["sentDateTime"] ?? "");
+      const safeDate   = sentRaw ? sentRaw.replace(/[:/\s]/g, "-").substring(0, 19) : `msg_${count}`;
+      const subject    = String(msg["subject"] ?? "(no subject)");
+      const safeSubject = safeName(subject, 80);
+
+      // Sub-folder named after the sender's email address
+      const senderDir = path.join(folderDir, safeName(fromEmail || "unknown", 80));
+      fs.mkdirSync(senderDir, { recursive: true });
+
+      fs.writeFileSync(path.join(senderDir, `${safeDate}_${safeSubject}.eml`),
         buildEml(msg, folder.displayName), "utf-8");
       count++;
     }
@@ -1216,9 +1237,14 @@ ipcMain.handle(
           content,
         ].join("\r\n");
 
-        const safeDate = date ? date.replace(/[:/\s]/g, "-").substring(0, 19) : `msg_${count}`;
-        const safeId   = msgId.replace(/[/\\:*?"<>|]/g, "").substring(0, 32);
-        fs.writeFileSync(path.join(exportDir, `${safeDate}_${safeId}.eml`), eml, "utf-8");
+        const safeDate    = date ? date.replace(/[:/\s]/g, "-").substring(0, 19) : `msg_${count}`;
+        const safeSubject = safeName(subject, 80);
+
+        // Sub-folder named after the sender's email address
+        const senderDir = path.join(exportDir, safeName(fromEmail || "unknown", 80));
+        fs.mkdirSync(senderDir, { recursive: true });
+
+        fs.writeFileSync(path.join(senderDir, `${safeDate}_${safeSubject}.eml`), eml, "utf-8");
         count++;
       }
 
@@ -1254,8 +1280,9 @@ const MONDAY_API_TOKEN = (() => {
       if (token) return token as string;
     } catch { /* not found */ }
   }
-  // Fallback: MONDAY_API_TOKEN from .env (loaded at startup via dotenv)
-  const envToken = process.env.MONDAY_API_TOKEN;
+  // Fallback: MONDAY_API_TOKEN from .env (loaded at startup via dotenv).
+  // Strip any accidental surrounding quotes that editors/dotenv may add.
+  const envToken = (process.env.MONDAY_API_TOKEN ?? "").replace(/^["']|["']$/g, "").trim();
   if (envToken) return envToken;
   return null;
 })();
@@ -1266,6 +1293,11 @@ function mondayGraphQL(query: string): Promise<unknown> {
       reject(new Error("Monday API token not configured. Set it in .bob/mcp.json (mcpServers.monday.headers.Authorization) or as MONDAY_API_TOKEN in .env"));
       return;
     }
+    // Ensure the Authorization value always has the "Bearer " prefix that
+    // Monday's v2 API expects when receiving a JWT / personal token.
+    const authHeader = MONDAY_API_TOKEN.startsWith("Bearer ")
+      ? MONDAY_API_TOKEN
+      : `Bearer ${MONDAY_API_TOKEN}`;
     const body = JSON.stringify({ query });
     const options = {
       hostname: "api.monday.com",
@@ -1273,7 +1305,9 @@ function mondayGraphQL(query: string): Promise<unknown> {
       method: "POST",
       headers: {
         "Content-Type": "application/json",
-        "Authorization": MONDAY_API_TOKEN,
+        "Authorization": authHeader,
+        // Monday.com v2 API requires this header since 2024
+        "API-Version": "2024-01",
         "Content-Length": Buffer.byteLength(body),
       },
     };
@@ -1301,8 +1335,14 @@ ipcMain.handle("list-monday-boards", async () => {
     } }`;
     const result = await mondayGraphQL(query) as { data?: { boards?: unknown[] }; errors?: unknown[] };
     if (result.errors) {
-      const msg = JSON.stringify(result.errors);
-      send("monday-error", { message: msg });
+      const errs = result.errors as Array<{ message?: string; extensions?: { code?: string } }>;
+      const code = errs[0]?.extensions?.code ?? "";
+      const rawMsg = errs[0]?.message ?? JSON.stringify(errs);
+      let friendly = rawMsg;
+      if (code === "SERVICE_UNAVAILABLE" || rawMsg.toLowerCase().includes("platform authorization")) {
+        friendly = "Monday API token is invalid or expired. Go to monday.com → Avatar → Profile → Developer → API and regenerate your personal API token, then update it in .env (MONDAY_API_TOKEN).";
+      }
+      send("monday-error", { message: friendly });
       return { boards: [] };
     }
     return { boards: result.data?.boards ?? [] };

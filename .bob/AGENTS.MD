@@ -16,6 +16,7 @@
 # Output folder
    - All the output documents which are asked to be provided should be writen in timestamped format in "output" folder
    - The result documents should be written in "output" folder, if the "output" folder does not exist, it should be created
+   - For this project ".eml" extractions should be extracted in a sub-folder on the local disk with the name of the email origine, and the file name should be filestamped with the "subject" of the email in the name of ".eml" file
 
 # Automation Scripts
    - All the BASH scripts, should be written in "scripts" folder under the parent folder

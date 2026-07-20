@@ -171,6 +171,7 @@
     #btn-load-folders   { background: var(--accent2); color: #1e1e2e; }
     #btn-extract        { background: var(--accent);  color: #fff; }
     #btn-open-output    { background: var(--ok);      color: #1e1e2e; display: none; }
+    #btn-run-again      { background: var(--border);  color: var(--text); display: none; }
     #btn-select-all     { background: var(--surface); color: var(--accent2); border: 1px solid var(--border);
                           font-size: 12px; padding: 5px 12px; }
     #btn-deselect-all   { background: var(--surface); color: var(--text-muted); border: 1px solid var(--border);
@@ -901,6 +902,7 @@
       <button id="btn-extract" disabled>Run Extraction</button>
       <button id="btn-preview" disabled style="background:#89dceb;color:#1e1e2e;display:none;">👁 Preview Emails</button>
       <button id="btn-open-output">Open Output</button>
+      <button id="btn-run-again">🔄 Run Again</button>
     </div>
   </div>
 
@@ -1013,6 +1015,7 @@
     const btnExtract      = document.getElementById("btn-extract");
     const btnPreview      = document.getElementById("btn-preview");
     const btnOpenOutput   = document.getElementById("btn-open-output");
+    const btnRunAgain     = document.getElementById("btn-run-again");
     const sinceDate       = document.getElementById("since-date");
     const folderCard      = document.getElementById("folder-card");
     const folderLoading   = document.getElementById("folder-loading");
@@ -1183,6 +1186,7 @@
       resultMsg.style.display = "none";
       resultMsg.className = "";
       btnOpenOutput.style.display = "none";
+      btnRunAgain.style.display = "none";
     }
 
     function classifyLine(msg) {
@@ -1354,6 +1358,7 @@
         btnExtract.disabled = false;
         btnConnect.disabled = false;
         btnLoadFolders.disabled = false;
+        btnRunAgain.style.display = "inline-block";
 
         if (count === 0) {
           resultMsg.style.display = "block";
@@ -1423,6 +1428,7 @@
         btnExtract.disabled = false;
         btnConnect.disabled = false;
         btnLoadFolders.disabled = false;
+        btnRunAgain.style.display = "inline-block";
         resultMsg.style.display = "block";
         resultMsg.className = "err";
         resultMsg.textContent = "❌ Error: " + msg;
@@ -1440,6 +1446,16 @@
     // ── Open output ───────────────────────────────────────────────────────────
     btnOpenOutput.addEventListener("click", () => {
       if (lastOutputPath) api.openFile(lastOutputPath);
+    });
+
+    // ── Run Again ─────────────────────────────────────────────────────────────
+    // Resets the UI back to the configured state (folders/auth preserved) so
+    // the user can adjust options and run another extraction without restarting.
+    btnRunAgain.addEventListener("click", () => {
+      // Preserve authentication state across the reset
+      const wasAuthed = statusBadge.classList.contains("authed");
+      resetUI();
+      if (wasAuthed) setAuthenticated(true);
     });
 
     // ── Destination toggle ────────────────────────────────────────────────────
