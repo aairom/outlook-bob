@@ -32,7 +32,7 @@ If the Monday MCP server is already configured in Bob, no extra setup is needed.
 Open a terminal window, go to the folder where you want to download the project, and then run these commands one line at a time:
 
 ```bash
-git clone <repository-url>
+git clone https://github.com/aairom/outlook-bob
 cd Outlook-Bob
 pwd
 ls
