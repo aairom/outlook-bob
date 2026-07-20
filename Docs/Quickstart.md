@@ -124,7 +124,7 @@ If you see an error, re-check the token value and that the file path is exactly
 
 From the project root folder (`Outlook-Bob`), copy `.env.example` to `.env`. All defaults work out of the box —
 editing is only needed if you want to use your own Azure App Registration, change
-the default excluded domain, or set a custom Monday base URL.
+the default excluded domain, or supply your Monday API token directly.
 
 **macOS / Linux:**
 ```bash
@@ -138,18 +138,22 @@ Copy-Item .env.example .env
 
 | Variable | Default | Description |
 |---|---|---|
-| `CLIENT_ID` | Graph Explorer public client | Azure App Registration client ID |
+| `CLIENT_ID` | `14d82eec-204b-4c2f-b7e8-296a70dab67e` | Azure AD App client ID for Microsoft OAuth. **Leave blank** to use the built-in Graph Explorer client (works for any Microsoft 365 account). Only set this if you have your own Azure App Registration. |
 | `EXCLUDED_DOMAIN` | `.ibm.com` | Pre-fills the "Exclude addresses" field in the UI (can be changed at runtime) |
-| `REDIRECT_URI` | `http://localhost:8765` | OAuth callback URI — must match Azure registration if using your own |
+| `REDIRECT_URI` | `http://localhost:8765` | OAuth callback URI — must match Azure registration if using your own `CLIENT_ID` |
 | `LOGIN_HINT` | _(empty)_ | Microsoft account email to pre-select at sign-in |
-| `MONDAY_BASE_URL` | `https://monday.com` | Base URL for your Monday account — used to build item deep-links |
-| `MONDAY_API_TOKEN` | _(empty)_ | Monday personal API token — fallback when `.bob/mcp.json` is not present (see § 3) |
+| `MONDAY_BASE_URL` | `https://monday.com` | Base URL for your Monday account — used to build item deep-links in the UI |
+| `MONDAY_API_TOKEN` | _(empty)_ | Monday personal API token. Fallback when `.bob/mcp.json` is not present. Get it: monday.com → avatar → Profile → Developer → API → Copy. |
 
-> **Need your own CLIENT_ID?**
-> Azure Portal → App registrations → New registration →
-> Redirect URI: `http://localhost:8765` (public client / native) →
-> API permissions → `Mail.Read` (delegated) → Grant admin consent →
-> Copy the **Application (client) ID** into `.env`.
+> **Do I need a `CLIENT_ID`?** No — leave it blank. The app works out of the box with
+> Microsoft's public Graph Explorer client. Only fill this in if your organisation
+> requires its own Azure App Registration (e.g. for admin-consent policies).
+>
+> **How to create one if needed:**
+> Azure Portal → App registrations → New registration → name it →
+> Redirect URI: `http://localhost:8765` (Public client / native) →
+> API permissions → Microsoft Graph → Delegated → `Mail.Read` → Grant admin consent →
+> Copy the **Application (client) ID** (UUID) and paste it here.
 
 ### Cloud upload destinations (optional)
 
