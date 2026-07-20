@@ -1,4 +1,4 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
+import { app, BrowserWindow, ipcMain, shell, dialog } from "electron";
 import * as path from "path";
 import * as fs from "fs";
 import * as http from "http";
@@ -1431,6 +1431,230 @@ ipcMain.handle("add-monday-item-update", async (_event, args: { itemId: string; 
   } catch (err) {
     return { update: null, error: err instanceof Error ? err.message : String(err) };
   }
+});
+
+// ── Native dialog helpers ────────────────────────────────────────────────────
+
+ipcMain.handle("show-open-dialog", async (_event, args: {
+  title: string;
+  properties: Array<"openFile" | "openDirectory">;
+  filters?: Array<{ name: string; extensions: string[] }>;
+}) => {
+  if (!mainWindow) return { canceled: true, filePaths: [] };
+  const result = await dialog.showOpenDialog(mainWindow, {
+    title:      args.title,
+    properties: args.properties,
+    filters:    args.filters,
+  });
+  return result;
+});
+
+// ── EML → Monday triage ──────────────────────────────────────────────────────
+
+/** Strip HTML tags and collapse whitespace to plain text. */
+function stripHtml(html: string): string {
+  return html
+    .replace(/<style[^>]*>[\s\S]*?<\/style>/gi, "")
+    .replace(/<script[^>]*>[\s\S]*?<\/script>/gi, "")
+    .replace(/<[^>]+>/g, " ")
+    .replace(/&nbsp;/gi, " ")
+    .replace(/&amp;/gi, "&")
+    .replace(/&lt;/gi, "<")
+    .replace(/&gt;/gi, ">")
+    .replace(/&quot;/gi, '"')
+    .replace(/\s{2,}/g, " ")
+    .trim();
+}
+
+/** Parse key headers from a raw .eml string. */
+function parseEmlHeaders(raw: string): Record<string, string> {
+  const headers: Record<string, string> = {};
+  // Headers end at the first blank line
+  const headerSection = raw.split(/\r?\n\r?\n/)[0] ?? "";
+  // Unfold multi-line headers (CRLF + whitespace continuation)
+  const unfolded = headerSection.replace(/\r?\n([ \t]+)/g, " ");
+  for (const line of unfolded.split(/\r?\n/)) {
+    const m = line.match(/^([A-Za-z\-]+):\s*(.*)$/);
+    if (m) headers[m[1].toLowerCase()] = m[2].trim();
+  }
+  return headers;
+}
+
+/** Extract plain-text body from a raw .eml string. */
+function parseEmlBody(raw: string): string {
+  const bodyStart = raw.search(/\r?\n\r?\n/);
+  if (bodyStart === -1) return "";
+  const body = raw.slice(bodyStart).trim();
+  return stripHtml(body);
+}
+
+interface EmlTriageResult {
+  file:    string;
+  itemId:  string | null;
+  subject: string;
+  error:   string | null;
+}
+
+ipcMain.handle("process-eml-folder", async (
+  _event,
+  args: { folderPath: string; promptContent: string; boardId: string }
+): Promise<{ results: EmlTriageResult[]; processedDir: string }> => {
+  const { folderPath, boardId } = args;
+  // promptContent may be a "PATH:<absolute-path>" sentinel — read the file here
+  let promptContent = args.promptContent;
+  if (promptContent.startsWith("PATH:")) {
+    const promptPath = promptContent.slice(5);
+    try { promptContent = fs.readFileSync(promptPath, "utf-8"); }
+    catch { promptContent = `(prompt file not found: ${promptPath})`; }
+  }
+  const onProgress = (msg: string) => send("eml-triage-progress", { message: msg });
+
+  // Collect .eml files (top-level + one level of subfolders, skip processed/)
+  const emlFiles: string[] = [];
+  const collect = (dir: string, depth = 0) => {
+    let entries: string[] = [];
+    try { entries = fs.readdirSync(dir); } catch { return; }
+    for (const entry of entries) {
+      if (entry === "processed") continue;
+      const full = path.join(dir, entry);
+      const stat = fs.statSync(full);
+      if (stat.isDirectory() && depth < 2) { collect(full, depth + 1); continue; }
+      if (entry.endsWith(".eml")) emlFiles.push(full);
+    }
+  };
+  collect(folderPath);
+  emlFiles.sort();
+
+  if (emlFiles.length === 0) {
+    onProgress("⚠️ No .eml files found in the selected folder.");
+    return { results: [], processedDir: "" };
+  }
+
+  // Ensure processed/ subfolder exists
+  const processedDir = path.join(folderPath, "processed");
+  fs.mkdirSync(processedDir, { recursive: true });
+
+  onProgress(`Found ${emlFiles.length} .eml file(s). Starting triage…`);
+
+  const results: EmlTriageResult[] = [];
+
+  for (let i = 0; i < emlFiles.length; i++) {
+    const filePath = emlFiles[i];
+    const fileName = path.basename(filePath);
+    onProgress(`[${i + 1}/${emlFiles.length}] Processing: ${fileName}`);
+
+    let raw = "";
+    try { raw = fs.readFileSync(filePath, "utf-8"); }
+    catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      onProgress(`  ❌ Cannot read file: ${errMsg}`);
+      results.push({ file: fileName, itemId: null, subject: "", error: errMsg });
+      continue;
+    }
+
+    const headers = parseEmlHeaders(raw);
+    const subject  = headers["subject"] || "(no subject)";
+    const from     = headers["from"]    || "unknown";
+    const date     = headers["date"]    || "";
+    const bodyText = parseEmlBody(raw);
+
+    // Build the prompt payload for this specific email
+    const emailContent = [
+      `Subject: ${subject}`,
+      `From: ${from}`,
+      `Date: ${date}`,
+      ``,
+      `Body:`,
+      bodyText.slice(0, 4000), // cap to avoid oversized payloads
+    ].join("\n");
+
+    // Apply prompt instructions: derive urgency, category, summary, action items
+    // We use deterministic rules here (no LLM call needed in main process).
+    // The prompt is forwarded to the renderer via progress so Bob can show it;
+    // actual AI extraction is performed by Bob when the user reviews inline.
+    // For the in-app automated flow, we apply rule-based extraction:
+
+    const subjectLower = subject.toLowerCase();
+    const bodyLower    = bodyText.toLowerCase();
+    const urgencyKeywords = ["urgent", "asap", "critical", "important", "immediate", "action required"];
+    const lowKeywords     = ["fyi", "newsletter", "unsubscribe", "no action"];
+    const urgency =
+      urgencyKeywords.some(k => subjectLower.includes(k) || bodyLower.slice(0,200).includes(k))
+        ? "🔴 High"
+        : lowKeywords.some(k => subjectLower.includes(k) || bodyLower.slice(0,200).includes(k))
+        ? "🟢 Low"
+        : "🟡 Medium";
+
+    const category =
+      subjectLower.includes("invite") || subjectLower.includes("meeting") || subjectLower.includes("calendar")
+        ? "Meeting Request"
+        : subjectLower.includes("re:") || subjectLower.includes("fwd:")
+        ? "Follow-up"
+        : urgency === "🔴 High"
+        ? "Action Required"
+        : subjectLower.includes("fyi") || subjectLower.includes("newsletter")
+        ? "Information"
+        : "Other";
+
+    const summary = bodyText.length > 0
+      ? bodyText.slice(0, 300).replace(/\n+/g, " ").trim() + (bodyText.length > 300 ? "…" : "")
+      : "(no body content)";
+
+    // Prompt instructions are embedded in the update note (visible to Bob / user)
+    const note = [
+      `📧 From: ${from}`,
+      `📅 Date: ${date}`,
+      `🚦 Urgency: ${urgency}`,
+      `🏷️ Category: ${category}`,
+      ``,
+      `📝 Summary:`,
+      summary,
+      ``,
+      `📄 Prompt used:`,
+      promptContent.slice(0, 500),
+      ``,
+      `📎 Source file: ${fileName}`,
+      ``,
+      `📬 Full email content:`,
+      emailContent,
+    ].join("\n");
+
+    // Create Monday item
+    let itemId: string | null = null;
+    try {
+      const itemResult = await mondayGraphQL(`mutation {
+        create_item(board_id: ${boardId}, item_name: ${JSON.stringify(subject)}) { id name }
+      }`) as { data?: { create_item?: { id: string; name: string } }; errors?: unknown[] };
+
+      if (itemResult.errors) throw new Error(JSON.stringify(itemResult.errors));
+      itemId = itemResult.data?.create_item?.id ?? null;
+      if (!itemId) throw new Error("No item ID returned");
+
+      // Post the triage note as an update
+      const escapedNote = note.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
+      await mondayGraphQL(`mutation {
+        create_update(item_id: ${itemId}, body: "${escapedNote}") { id }
+      }`);
+
+      onProgress(`  ✅ Created Monday item #${itemId} — "${subject}"`);
+
+      // Move .eml to processed/
+      const dest = path.join(processedDir, fileName);
+      fs.renameSync(filePath, dest);
+      onProgress(`  📁 Moved → processed/${fileName}`);
+
+      results.push({ file: fileName, itemId, subject, error: null });
+    } catch (e) {
+      const errMsg = e instanceof Error ? e.message : String(e);
+      onProgress(`  ❌ Monday error: ${errMsg}`);
+      results.push({ file: fileName, itemId: null, subject, error: errMsg });
+    }
+  }
+
+  const ok  = results.filter(r => !r.error).length;
+  const err = results.filter(r =>  r.error).length;
+  onProgress(`\n🏁 Triage complete: ${ok} created, ${err} failed.`);
+  return { results, processedDir };
 });
 
 // ── Box integration ───────────────────────────────────────────────────────────

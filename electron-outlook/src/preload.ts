@@ -179,6 +179,23 @@ contextBridge.exposeInMainWorld("electronAPI", {
   }): Promise<{ odFileId: string; odFileName: string; odWebUrl: string; error?: string }> =>
     ipcRenderer.invoke("upload-to-onedrive", args),
 
+  showOpenDialog: (args: {
+    title: string;
+    properties: Array<"openFile" | "openDirectory">;
+    filters?: Array<{ name: string; extensions: string[] }>;
+  }): Promise<{ canceled: boolean; filePaths: string[] }> =>
+    ipcRenderer.invoke("show-open-dialog", args),
+
+  processEmlFolder: (args: {
+    folderPath: string;
+    promptContent: string;
+    boardId: string;
+  }): Promise<{
+    results: Array<{ file: string; itemId: string | null; subject: string; error: string | null }>;
+    processedDir: string;
+  }> =>
+    ipcRenderer.invoke("process-eml-folder", args),
+
   // ── Events ─────────────────────────────────────────────────────────────────
   onProgress: (cb: (message: string) => void) => {
     ipcRenderer.on("progress", (_e, payload: { message: string }) => cb(payload.message));
@@ -196,6 +213,10 @@ contextBridge.exposeInMainWorld("electronAPI", {
 
   onMondayError: (cb: (message: string) => void) => {
     ipcRenderer.on("monday-error", (_e, payload: { message: string }) => cb(payload.message));
+  },
+
+  onEmlTriageProgress: (cb: (message: string) => void) => {
+    ipcRenderer.on("eml-triage-progress", (_e, payload: { message: string }) => cb(payload.message));
   },
 
   removeAllListeners: (channel: string) => {
