@@ -1238,6 +1238,9 @@ ipcMain.handle("open-file", async (_event, args: { path: string }) => {
 });
 
 // ── Monday Boards ─────────────────────────────────────────────────────────────
+// Token resolution order (first non-empty value wins):
+//   1. .bob/mcp.json  mcpServers.monday.headers.Authorization  (Bob MCP server — preferred)
+//   2. MONDAY_API_TOKEN environment variable from .env          (standalone / CI fallback)
 const MONDAY_API_TOKEN = (() => {
   const candidates = [
     path.join(__dirname, "..", "..", "..", ".bob", "mcp.json"),
@@ -1251,13 +1254,16 @@ const MONDAY_API_TOKEN = (() => {
       if (token) return token as string;
     } catch { /* not found */ }
   }
+  // Fallback: MONDAY_API_TOKEN from .env (loaded at startup via dotenv)
+  const envToken = process.env.MONDAY_API_TOKEN;
+  if (envToken) return envToken;
   return null;
 })();
 
 function mondayGraphQL(query: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
     if (!MONDAY_API_TOKEN) {
-      reject(new Error("Monday API token not configured in .bob/mcp.json"));
+      reject(new Error("Monday API token not configured. Set it in .bob/mcp.json (mcpServers.monday.headers.Authorization) or as MONDAY_API_TOKEN in .env"));
       return;
     }
     const body = JSON.stringify({ query });

@@ -22,8 +22,8 @@ interactively, and exports emails in your preferred format. The app also include
 No Azure App Registration needed — the default `CLIENT_ID` uses Microsoft's public
 Graph Explorer client which works for any Microsoft 365 account.
 
-The Monday Boards panel reads the API token from `.bob/mcp.json` at the project root.
-If the Monday MCP server is already configured in Bob, no extra setup is needed.
+The Monday Boards panel (and the **Send to Monday** feature) read the API token from
+`.bob/mcp.json` at the project root. See [§ 3. Monday MCP Setup](#3-monday-mcp-setup) below.
 
 ---
 
@@ -48,11 +48,83 @@ What these commands do:
 
 You should now be in the project root folder and able to see folders such as `Docs`, `electron-outlook`, and `scripts`.
 
-## 3. Configure (optional)
+## 3. Monday MCP Setup
+
+The Monday.com integration requires a valid API token stored in the Bob MCP configuration
+file `.bob/mcp.json` at the project root. There are two ways to set this up.
+
+### Option A — Configure via Bob (recommended)
+
+If you are using IBM Bob IDE, open the MCP settings panel and add the Monday MCP server:
+
+1. Open **Bob → Settings → MCP Servers** (or edit `~/.bob/mcp.json` for a global setup,
+   or `.bob/mcp.json` inside this project for a project-scoped setup).
+2. Add the following entry:
+
+```json
+{
+  "mcpServers": {
+    "monday": {
+      "type": "sse",
+      "url": "https://mcp.monday.com/sse",
+      "headers": {
+        "Authorization": "<your-monday-api-token>"
+      }
+    }
+  }
+}
+```
+
+3. Replace `<your-monday-api-token>` with your personal Monday API token (see below).
+4. Save the file — Bob connects to the Monday MCP server automatically.
+
+### Option B — Create `.bob/mcp.json` manually
+
+If you are not using Bob, create the file `.bob/mcp.json` at the **project root**
+(`Outlook-Bob/.bob/mcp.json`) with the same content as shown above.
+
+```bash
+mkdir -p .bob
+cat > .bob/mcp.json << 'EOF'
+{
+  "mcpServers": {
+    "monday": {
+      "type": "sse",
+      "url": "https://mcp.monday.com/sse",
+      "headers": {
+        "Authorization": "<your-monday-api-token>"
+      }
+    }
+  }
+}
+EOF
+```
+
+Replace `<your-monday-api-token>` with your actual token before saving.
+
+### How to get your Monday API token
+
+1. Sign in to [monday.com](https://monday.com).
+2. Click your **avatar** (bottom-left) → **Profile** → **Developer**.
+3. Scroll to **API** → click **Copy** next to your personal API token.
+
+> **Security:** never commit `.bob/mcp.json` to Git. It is already listed in
+> `.gitignore` because the `.bob/` folder is excluded from the repository.
+
+### Verify the token
+
+Once `.bob/mcp.json` is in place, launch the app and click **📋 View My Boards**
+in the Monday.com Boards card. If your boards appear, the token is working correctly.
+If you see an error, re-check the token value and that the file path is exactly
+`<project-root>/.bob/mcp.json`.
+
+---
+
+## 4. Configure app environment (optional)
 
 From the project root folder (`Outlook-Bob`), copy `.env.example` to `.env`. All defaults work out of the box —
-editing is only needed if you want to use your own Azure App Registration or change
-the default excluded domain.
+editing is only needed if you want to use your own Azure App Registration, change
+the default excluded domain, or set a custom Monday base URL.
 
 **macOS / Linux:**
 ```bash
@@ -70,6 +142,8 @@ Copy-Item .env.example .env
 | `EXCLUDED_DOMAIN` | `.ibm.com` | Pre-fills the "Exclude addresses" field in the UI (can be changed at runtime) |
 | `REDIRECT_URI` | `http://localhost:8765` | OAuth callback URI — must match Azure registration if using your own |
 | `LOGIN_HINT` | _(empty)_ | Microsoft account email to pre-select at sign-in |
+| `MONDAY_BASE_URL` | `https://monday.com` | Base URL for your Monday account — used to build item deep-links |
+| `MONDAY_API_TOKEN` | _(empty)_ | Monday personal API token — fallback when `.bob/mcp.json` is not present (see § 3) |
 
 > **Need your own CLIENT_ID?**
 > Azure Portal → App registrations → New registration →
@@ -126,9 +200,28 @@ OneDrive reuses your existing Microsoft connection — **no extra credentials ne
 3. Click **📂 Load OneDrive Folders** → select a folder (or type a new name)
 4. Run extraction — file uploads automatically after export completes
 
+### Monday API token via `.env` (alternative to MCP setup)
+
+If you cannot or do not want to use `.bob/mcp.json`, you can supply your Monday API
+token directly in `.env`:
+
+```
+MONDAY_API_TOKEN=your_personal_monday_api_token
+```
+
+The app checks `.bob/mcp.json` first; if the token is not found there, it falls back
+to `MONDAY_API_TOKEN` from `.env`. Both sources produce identical behaviour — all Monday
+features (View Boards, Send to Monday) work the same way regardless of which source
+provides the token.
+
+| Source | Priority | Best for |
+|---|---|---|
+| `.bob/mcp.json` `Authorization` | **1st — preferred** | Bob users with MCP already configured |
+| `MONDAY_API_TOKEN` in `.env` | **2nd — fallback** | Standalone use, CI/CD, or non-Bob environments |
+
 ---
 
-## 4. Launch
+## 5. Launch
 
 ### Recommended launch method
 
@@ -244,7 +337,7 @@ How you receive updates depends on how you run the app:
 
 ---
 
-## 5. Using the app
+## 6. Using the app
 
 ### Step 0 — (Optional) Verify Monday token
 
@@ -441,7 +534,7 @@ Click **"Open Output"** to open the result file or folder.
 
 ---
 
-## 6. Output
+## 7. Output
 
 All exports go to `electron-outlook/output/` (gitignored):
 
@@ -509,7 +602,7 @@ sqlite3 electron-outlook/output/emails.sqlite \
 
 ---
 
-## 7. Stop the app
+## 8. Stop the app
 
 **macOS / Linux:**
 ```bash
@@ -523,7 +616,7 @@ powershell -ExecutionPolicy Bypass -File scripts\stop-electron-outlook.ps1
 
 ---
 
-## 8. Force re-login (clear token cache)
+## 9. Force re-login (clear token cache)
 
 **macOS / Linux:**
 ```bash
