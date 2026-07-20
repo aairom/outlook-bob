@@ -152,11 +152,14 @@ flowchart TD
 | `list-folders` | renderer → main | — | Fetch full folder tree recursively |
 | `start-extraction` | renderer → main | `folderIds, folderTree, since?, exportParams` | Run export to file |
 | `preview-emails` | renderer → main | `folderIds, folderTree, since?, limit?, flaggedOnly?` | Fetch messages for on-screen display (no file written) |
+| `download-selected-emails` | renderer → main | `messages: PreviewMessage[]` | Save selected preview emails as `.eml` files to `output/preview_download_TIMESTAMP/` |
 | `open-file` | renderer → main | `path` | Open file/folder with OS default app |
 | `list-monday-boards` | renderer → main | — | Fetch all Monday boards via GraphQL API |
 | `get-monday-board-items` | renderer → main | `boardId` | Fetch up to 200 items for a board |
 | `create-monday-item` | renderer → main | `boardId, itemName` | Create a new item on a Monday board |
 | `add-monday-item-update` | renderer → main | `itemId, body` | Post a text update note on a Monday item |
+| `show-open-dialog` | renderer → main | `title, properties, filters?` | Open native OS file / folder picker dialog |
+| `process-eml-folder` | renderer → main | `folderPath, promptContent, boardId` | Process `.eml` folder: parse emails, create Monday items, move files to `processed/` |
 | `connect-box` | renderer → main | — | Start Box OAuth 2.0 browser login flow |
 | `box-logout` | renderer → main | — | Clear Box token cache |
 | `get-box-status` | renderer → main | — | Check if a valid Box token exists |
@@ -168,10 +171,11 @@ flowchart TD
 | `get-onedrive-status` | renderer → main | — | Check if a valid Microsoft token exists (reused for OneDrive) |
 | `list-onedrive-folders` | renderer → main | — | List top-level OneDrive folders via Graph API |
 | `upload-to-onedrive` | renderer → main | `localPath, oneDriveFolderId, newFolderName?` | Upload exported file to OneDrive (chunked for large files) |
-| `progress` | main → renderer | `{ message }` | Live status updates |
+| `progress` | main → renderer | `{ message }` | Live status updates during extraction |
 | `done` | main → renderer | `{ outputPath, count, format }` | Extraction complete |
 | `error` | main → renderer | `{ message }` | Error notification |
 | `monday-error` | main → renderer | `{ message }` | Monday API error notification |
+| `eml-triage-progress` | main → renderer | `{ message }` | Live progress updates during EML folder triage |
 
 ---
 
@@ -258,6 +262,7 @@ interface MondayBoard {
   state:       string;   // "active" | "archived" | "deleted"
   items_count: number;
   workspace:   { id: string; name: string } | null;
+  columns:     Array<{ id: string; title: string; type: string }>;  // board column metadata
 }
 ```
 

@@ -417,7 +417,8 @@ Edit `prompts/email-triage.md` to customise what is extracted and how the Monday
 | `scripts/stop-electron-outlook.sh` | Stop the app gracefully |
 | `scripts/start-electron-outlook.ps1` | Build TypeScript + open desktop window (Windows) |
 | `scripts/stop-electron-outlook.ps1` | Stop the app gracefully (Windows) |
-| `scripts/process-eml-to-monday.sh` | Pre-flight check for EML → Monday triage (macOS / Linux) |
+| `scripts/process-eml-to-monday.sh` | Pre-flight check for EML → Monday triage — Bob Agent workflow (macOS / Linux) |
+| `scripts/github-push.sh` | Convenience script to commit and push changes to GitHub |
 
 ## Licence
 
