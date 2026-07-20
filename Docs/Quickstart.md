@@ -20,7 +20,21 @@ interactively, and exports emails in your preferred format. The app also include
 | Monday.com account | Monday Boards panel only | — |
 
 No Azure App Registration needed — the default `CLIENT_ID` uses Microsoft's public
-Graph Explorer client which works for any Microsoft 365 account.
+**Graph Explorer** client (`14d82eec-204b-4c2f-b7e8-296a70dab67e`), which is a
+multi-tenant application published by Microsoft itself. It works for any Microsoft 365
+or personal Outlook account.
+
+> **What is Graph Explorer?**
+> [Graph Explorer](https://developer.microsoft.com/en-us/graph/graph-explorer) is
+> Microsoft's own interactive API testing tool. Its client ID is publicly documented and
+> intentionally usable by third-party apps for development and personal use — no Azure
+> tenant or admin approval is required. The app only requests `Mail.Read` (read-only)
+> and `offline_access` (token refresh) scopes, which any user can consent to individually.
+>
+> **When to use your own `CLIENT_ID` instead:**
+> If your organisation enforces admin-consent policies that block the Graph Explorer
+> client, or if you need to distribute the app inside a company tenant, register your
+> own Azure App and set `CLIENT_ID` in `.env` (see § 4 for instructions).
 
 The Monday Boards panel (and the **Send to Monday** feature) read the API token from
 `.bob/mcp.json` at the project root. See [§ 3. Monday MCP Setup](#3-monday-mcp-setup) below.
