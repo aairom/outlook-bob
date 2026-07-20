@@ -372,6 +372,9 @@ Each board row shows:
 > This step is independent of the email extraction — no Microsoft sign-in is required
 > to use it. If the Monday token is missing, an error is displayed inline.
 
+> **Tip:** clicking **📋 View My Boards** also populates the board picker in the email
+> selection bar, enabling the **Send to Monday** feature in Preview mode.
+
 ### Step 9b — (Preview only) Set the message limit
 When **Preview** format is selected, a **"👁 Load up to N emails"** selector appears
 (50 / 100 / 200). Choose how many messages to fetch before clicking **👁 Preview Emails**.
@@ -393,6 +396,31 @@ The preview card shows:
 > Downloading from the Preview card does **not** require running a full extraction first — it uses the messages already loaded on screen.
 
 No file is written to disk when simply browsing the preview; files are only saved when you explicitly click **⬇ Download as EML**.
+
+#### Sending selected emails to Monday
+
+You can push any checked emails directly to a Monday board without leaving the app.
+
+**Prerequisites:** the Monday API token must be configured in `.bob/mcp.json` and you must have already clicked **📋 View My Boards** at least once in the current session.
+
+1. In the **Monday.com Boards** card, click **📋 View My Boards** — this loads your boards *and* enables the board picker in the selection bar.
+2. Tick one or more email checkboxes in the Preview list — the selection bar appears.
+3. In the selection bar, choose the target board from the **board dropdown** (labelled `— pick a board —`).
+4. Click **📋 Send to Monday**.
+
+For each selected email the app creates a Monday item and attaches the email body as a note:
+
+| Email field | Monday destination |
+|---|---|
+| Subject | Item name |
+| Body (plain text) | Item update / note |
+
+The selection bar shows live feedback:
+- 🔵 `Sending N email(s) to Monday…` while in progress
+- ✅ `N item(s) created on "<BoardName>"` on success
+- ❌ Error details if any items fail (the remaining emails are still processed)
+
+> If the board dropdown still shows `"— load boards first —"`, click **📋 View My Boards** in the Monday panel first.
 
 ### Step 11 — Run
 Click **"Run Extraction"** (or **"👁 Preview Emails"** in Preview mode). The progress log shows live updates:

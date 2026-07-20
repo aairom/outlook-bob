@@ -25,6 +25,9 @@ flowchart TD
     J1 & J2 & J3 & J4 & J5 -->|saveAttachments=true| J6[Attachment files by folder\noutput/attachments_TIMESTAMP/FolderName/]
     J1 & J2 & J3 & J4 & J5 -->|zipOutput=true| J7[ZIP archive\noutput/name_TIMESTAMP.zip\noriginal removed]
 
+    P -->|check emails + pick board| SM[📋 Send to Monday\ncreate_item per email\ncreate_update with body]
+    SM --> MON2[Monday item created\nsubject as name\nbody as update note]
+
     M([View My Boards]) --> MON[Monday.com API\napi.monday.com/v2\ntoken from .bob/mcp.json]
     MON --> MB[Board list rendered\nname · workspace · item count · state]
 ```
@@ -63,6 +66,31 @@ The app includes a **Monday.com Boards** card at the bottom of the window. Click
 **Token configuration:** the app reads the Monday API token automatically from `.bob/mcp.json` (the same token used by the Monday MCP server). No additional setup is needed if the MCP is already configured.
 
 > If the token is not found or is invalid, an error message is shown inline in the card.
+
+### Email → Monday (Send to Monday)
+
+Emails browsed in **Preview** mode can be pushed directly to a Monday board as items.
+
+**How it works:**
+1. Load boards by clicking **📋 View My Boards** — this also populates the board picker in the email selection bar.
+2. Switch to **Preview** format and load emails.
+3. Tick one or more email checkboxes — the selection bar appears.
+4. Pick the target board from the **board dropdown** in the selection bar.
+5. Click **📋 Send to Monday**.
+
+For each selected email the app:
+- Creates a Monday item with the **email subject** as the item name (`create_item` mutation)
+- Posts the **full email body** (plain text) as an item update note (`create_update` mutation)
+
+| Email field | Monday destination |
+|---|---|
+| Subject | Item name |
+| Body (plain text) | Item update / note |
+
+The selection bar shows a live status:
+- 🔵 `Sending N email(s) to Monday…` while in progress
+- ✅ `N item(s) created on "<BoardName>"` on success
+- ❌ Error details if any items fail (loop continues for remaining emails)
 
 ## Filters & Options
 

@@ -36,9 +36,9 @@ flowchart TD
     MCPCFG[".bob/mcp.json (project root)\nMonday API token"]
 
     subgraph App["electron-outlook — Electron Desktop App"]
-        MAIN["main.ts\nMain process\nAuth · Graph API · Export logic · ZIP\nMonday GraphQL client · Preview handler"]
+        MAIN["main.ts\nMain process\nAuth · Graph API · Export logic · ZIP\nMonday GraphQL client · Preview handler\nEmail→Monday item+update handler"]
         PRE["preload.ts\nContext bridge\nIPC channel definitions"]
-        UI["renderer/index.html\nRenderer process\nFolder tree · Export options UI\nPreview card · Monday Boards card\nresetUI() on every boot"]
+        UI["renderer/index.html\nRenderer process\nFolder tree · Export options UI\nPreview card · Monday Boards card\nBoard picker · Send to Monday\nresetUI() on every boot"]
     end
 
     subgraph Microsoft["Microsoft Cloud"]
@@ -71,8 +71,8 @@ flowchart TD
     MAIN -->|GET mailFolders + messages paginated\nPrefer: IdType='ImmutableId'| GRAPH
     MAIN -->|preview-emails: GET messages\nno $orderby, up to 200| GRAPH
     GRAPH -->|JSON| MAIN
-    MAIN -->|POST /v2 GraphQL\nboards query| MAPI
-    MAPI -->|boards JSON| MAIN
+    MAIN -->|POST /v2 GraphQL\nboards · items · create_item · create_update| MAPI
+    MAPI -->|boards + items + mutation results JSON| MAIN
     MAIN --> CSV1 & CSV2 & JSON & EML & SQLITE & PREV
     CSV1 & CSV2 & JSON & EML & SQLITE -->|zipOutput=true| ZIP
     IDP --> CACHE
@@ -154,6 +154,9 @@ flowchart TD
 | `preview-emails` | renderer → main | `folderIds, folderTree, since?, limit?, flaggedOnly?` | Fetch messages for on-screen display (no file written) |
 | `open-file` | renderer → main | `path` | Open file/folder with OS default app |
 | `list-monday-boards` | renderer → main | — | Fetch all Monday boards via GraphQL API |
+| `get-monday-board-items` | renderer → main | `boardId` | Fetch up to 200 items for a board |
+| `create-monday-item` | renderer → main | `boardId, itemName` | Create a new item on a Monday board |
+| `add-monday-item-update` | renderer → main | `itemId, body` | Post a text update note on a Monday item |
 | `connect-box` | renderer → main | — | Start Box OAuth 2.0 browser login flow |
 | `box-logout` | renderer → main | — | Clear Box token cache |
 | `get-box-status` | renderer → main | — | Check if a valid Box token exists |
@@ -173,6 +176,27 @@ flowchart TD
 ---
 
 ## Monday.com Integration
+
+### Email → Monday (Send to Monday)
+
+Emails browsed in **Preview** mode can be pushed directly to a Monday board as items from the selection action bar.
+
+**Flow:**
+1. User clicks **📋 View My Boards** — boards are fetched and the board picker in the email selection bar is populated.
+2. User switches to **Preview** format and loads emails.
+3. User checks one or more emails — the selection bar becomes visible.
+4. User picks a target board from the dropdown and clicks **📋 Send to Monday**.
+5. For each selected email:
+   - `create-monday-item` IPC → `create_item` GraphQL mutation → item name = email subject
+   - `add-monday-item-update` IPC → `create_update` GraphQL mutation → body = full plain-text email body
+6. Inline status shown: progress → ✅ summary or ❌ error
+
+| Email field | Monday destination | GraphQL mutation |
+|---|---|---|
+| Subject | Item name | `create_item(board_id, item_name)` |
+| Body (plain text) | Item update note | `create_update(item_id, body)` |
+
+> The board picker is only populated after the user explicitly clicks **📋 View My Boards** — no auto-fetch is performed.
 
 ### Token resolution
 
@@ -198,6 +222,16 @@ sent via the `monday-error` channel.
     state
     items_count
     workspace { id name }
+  }
+}
+```
+
+### `MondayItemUpdate` mutation
+
+```graphql
+mutation {
+  create_update(item_id: <itemId>, body: "<escaped body>") {
+    id
   }
 }
 ```
