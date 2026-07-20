@@ -114,6 +114,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   }> =>
     ipcRenderer.invoke("create-monday-item", { boardId, itemName }),
 
+  addMondayItemUpdate: (itemId: string, body: string): Promise<{
+    update: { id: string } | null;
+    error?: string;
+  }> =>
+    ipcRenderer.invoke("add-monday-item-update", { itemId, body }),
+
   previewEmails: (args: {
     folderIds: string[];
     folderTree: MailFolder[];

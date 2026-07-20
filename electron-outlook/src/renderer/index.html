@@ -225,6 +225,27 @@
     #download-status.ok  { color: #a6e3a1; }
     #download-status.err { color: #f38ba8; }
 
+    /* ── Send-to-Monday controls inside selection bar ── */
+    #monday-board-picker {
+      -webkit-app-region: no-drag;
+      background: #1e1e2e; border: 1px solid #45475a; border-radius: 7px;
+      color: #cdd6f4; font-size: 12px; padding: 5px 8px; outline: none; cursor: pointer;
+      max-width: 200px;
+    }
+    #monday-board-picker:disabled { opacity: 0.45; cursor: default; }
+    #btn-send-to-monday {
+      -webkit-app-region: no-drag;
+      background: #f9e2af; color: #1e1e2e;
+      padding: 6px 14px; border: none; border-radius: 7px;
+      font-size: 12px; font-weight: 600; cursor: pointer; transition: opacity 0.15s;
+    }
+    #btn-send-to-monday:hover:not(:disabled) { opacity: 0.82; }
+    #btn-send-to-monday:disabled { opacity: 0.35; cursor: default; }
+    #send-monday-status { font-size: 12px; margin-top: 6px; display: none; width: 100%; }
+    #send-monday-status.ok  { color: #a6e3a1; }
+    #send-monday-status.err { color: #f38ba8; }
+    #send-monday-status.info { color: #89b4fa; }
+
     /* per-row checkbox */
     .email-row-check {
       -webkit-app-region: no-drag;
@@ -773,8 +794,13 @@
       <span id="preview-selected-count">0</span> email(s) selected
       <button id="btn-download-selected">⬇ Download as EML</button>
       <span style="color:#6c7086; font-size:11px;">Files saved to output/</span>
+      <select id="monday-board-picker" disabled>
+        <option value="">— load boards first —</option>
+      </select>
+      <button id="btn-send-to-monday" disabled>📋 Send to Monday</button>
     </div>
     <div id="download-status"></div>
+    <div id="send-monday-status"></div>
 
     <div id="preview-list-wrap">
       <div id="preview-empty">No messages to display.</div>
@@ -1523,6 +1549,9 @@
     const btnSelectAllEmails   = document.getElementById("btn-select-all-emails");
     const btnDeselectAllEmails = document.getElementById("btn-deselect-all-emails");
     const downloadStatus    = document.getElementById("download-status");
+    const mondayBoardPicker  = document.getElementById("monday-board-picker");
+    const btnSendToMonday    = document.getElementById("btn-send-to-monday");
+    const sendMondayStatus   = document.getElementById("send-monday-status");
     const emailPane         = document.getElementById("email-pane");
     const emailPaneSubject  = document.getElementById("email-pane-subject");
     const emailPaneFrom     = document.getElementById("email-pane-from");
@@ -1673,6 +1702,53 @@
       }
     });
 
+    // ── Send selected emails to Monday ───────────────────────────────────────
+    btnSendToMonday.addEventListener("click", async () => {
+      const boardId = mondayBoardPicker.value;
+      if (!boardId) {
+        sendMondayStatus.className = "err";
+        sendMondayStatus.textContent = "Select a board first";
+        sendMondayStatus.style.display = "block";
+        return;
+      }
+      const msgs = allPreviewMessages.filter(m => checkedEmailIds.has(m.id));
+      if (!msgs.length) return;
+
+      btnSendToMonday.disabled = true;
+      sendMondayStatus.className = "info";
+      sendMondayStatus.textContent = `Sending ${msgs.length} email(s) to Monday…`;
+      sendMondayStatus.style.display = "block";
+
+      const boardName = mondayBoardPicker.options[mondayBoardPicker.selectedIndex].text;
+      let created = 0;
+      let failed  = 0;
+
+      for (const msg of msgs) {
+        const itemRes = await api.createMondayItem(boardId, msg.subject || "(no subject)");
+        if (itemRes.error || !itemRes.item) {
+          failed++;
+          continue;
+        }
+        const updRes = await api.addMondayItemUpdate(itemRes.item.id, msg.bodyText || "");
+        if (updRes.error) {
+          // Item was created but update failed — still count as created
+        }
+        created++;
+      }
+
+      btnSendToMonday.disabled = false;
+      if (failed === 0) {
+        sendMondayStatus.className = "ok";
+        sendMondayStatus.textContent = `✅ ${created} item(s) created on "${boardName}"`;
+      } else if (created === 0) {
+        sendMondayStatus.className = "err";
+        sendMondayStatus.textContent = `❌ All ${failed} item(s) failed to create`;
+      } else {
+        sendMondayStatus.className = "ok";
+        sendMondayStatus.textContent = `✅ ${created} created, ❌ ${failed} failed on "${boardName}"`;
+      }
+    });
+
     function openEmailPane(msg) {
       emailPaneSubject.textContent = msg.subject;
       emailPaneFrom.textContent    = msg.fromName ? `${msg.fromName} <${msg.from}>` : (msg.from || "—");
@@ -1817,6 +1893,7 @@
         document.getElementById("preview-list-wrap").querySelectorAll(".email-row").forEach(r => r.remove());
         document.getElementById("preview-selection-bar").style.display = "none";
         document.getElementById("download-status").style.display = "none";
+        document.getElementById("send-monday-status").style.display = "none";
       }
       allPreviewMessages = [];
       selectedEmailId    = null;
@@ -2070,6 +2147,21 @@
         mondayError.textContent = "No boards returned. Check your Monday API token in .bob/mcp.json.";
         return;
       }
+      // Populate the board picker in the email-preview selection bar
+      mondayBoardPicker.innerHTML = "";
+      const placeholder = document.createElement("option");
+      placeholder.value = "";
+      placeholder.textContent = "— pick a board —";
+      mondayBoardPicker.appendChild(placeholder);
+      boards.forEach(b => {
+        const opt = document.createElement("option");
+        opt.value = b.id;
+        opt.textContent = b.name;
+        mondayBoardPicker.appendChild(opt);
+      });
+      mondayBoardPicker.disabled = false;
+      btnSendToMonday.disabled = false;
+
       renderMondayBoards(boards);
     });
 

@@ -1368,6 +1368,25 @@ ipcMain.handle("create-monday-item", async (_event, args: { boardId: string; ite
   }
 });
 
+ipcMain.handle("add-monday-item-update", async (_event, args: { itemId: string; body: string }) => {
+  try {
+    const escaped = args.body.replace(/\\/g, "\\\\").replace(/"/g, '\\"').replace(/\n/g, "\\n");
+    const mutation = `mutation {
+      create_update(item_id: ${args.itemId}, body: "${escaped}") { id }
+    }`;
+    const result = await mondayGraphQL(mutation) as {
+      data?: { create_update?: { id: string } };
+      errors?: unknown[];
+    };
+    if (result.errors) {
+      return { update: null, error: JSON.stringify(result.errors) };
+    }
+    return { update: result.data?.create_update ?? null };
+  } catch (err) {
+    return { update: null, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
 // ── Box integration ───────────────────────────────────────────────────────────
 
 // Box token cache — separate file from Microsoft token
