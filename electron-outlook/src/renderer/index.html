@@ -2346,6 +2346,7 @@
         const parts = [];
         if (b.workspace?.name) parts.push("📂 " + b.workspace.name);
         parts.push((b.items_count ?? 0).toLocaleString() + " items");
+        parts.push("ID: " + b.id);
         meta.textContent = parts.join("  ·  ");
 
         info.append(name, meta);
