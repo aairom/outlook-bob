@@ -371,6 +371,54 @@ Duplicate filenames within the same folder are disambiguated by appending `_1`, 
 
 ---
 
+## EML → Monday Triage (Bob Agent workflow)
+
+A companion workflow lets **Bob** (AI agent) process exported `.eml` files using a local
+prompt file, create Monday items, and move processed files to a `processed/` subfolder.
+
+```mermaid
+sequenceDiagram
+    participant User
+    participant Script as process-eml-to-monday.sh
+    participant Bob as Bob Agent (eml-to-monday skill)
+    participant FS as File System
+    participant Monday as Monday GraphQL API
+
+    User->>Script: bash scripts/process-eml-to-monday.sh\n--folder --prompt --board
+    Script->>FS: Validate paths, count .eml files
+    Script->>FS: mkdir processed/
+    Script-->>User: Print Bob handoff instruction
+
+    User->>Bob: Paste instruction into Bob (Agent mode)
+    Bob->>FS: Read prompt file
+    Bob->>FS: find *.eml (recursive)
+    loop Each .eml file
+        Bob->>FS: read_file(.eml)
+        Bob->>Bob: Apply prompt → extract structured data
+        Bob->>Monday: create_item (subject → item name)
+        Monday-->>Bob: item.id
+        Bob->>Monday: create_update (formatted note)
+        Bob->>FS: mv .eml → processed/
+    end
+    Bob-->>User: Summary table (created / failed)
+```
+
+### Prompt file location
+
+```
+prompts/                  ← gitignored — stays local
+└── email-triage.md       ← default triage template (editable)
+```
+
+### Bob Skill
+
+```
+.bob/skills/
+└── eml-to-monday.md      ← auto-activated when user asks to process .eml files
+```
+
+---
+
 ## Project Structure
 
 ```
@@ -378,9 +426,13 @@ Outlook-Bob/
 ├── .env.example                          # Config template → copy to .env
 ├── .env                                  # Your secrets (gitignored)
 ├── .bob/
-│   └── mcp.json                          # MCP server config — Monday API token lives here
+│   ├── mcp.json                          # MCP server config — Monday API token lives here
+│   └── skills/
+│       └── eml-to-monday.md              # Bob skill — EML → Monday triage workflow
 ├── .gitignore
 ├── README.md
+├── prompts/                              # Local prompt files — gitignored
+│   └── email-triage.md                   # Default email triage extraction prompt
 ├── Docs/
 │   ├── Architecture.md                   # This file
 │   └── Quickstart.md                     # Setup & usage guide
@@ -388,7 +440,8 @@ Outlook-Bob/
 │   ├── start-electron-outlook.sh         # Build + launch (macOS / Linux)
 │   ├── stop-electron-outlook.sh          # Stop gracefully (macOS / Linux)
 │   ├── start-electron-outlook.ps1        # Build + launch (Windows)
-│   └── stop-electron-outlook.ps1         # Stop gracefully (Windows)
+│   ├── stop-electron-outlook.ps1         # Stop gracefully (Windows)
+│   └── process-eml-to-monday.sh          # Pre-flight helper — EML → Monday triage
 └── electron-outlook/
     ├── src/
     │   ├── main.ts                        # Main process — auth, Graph API, export logic, ZIP, Monday GraphQL client, preview handler

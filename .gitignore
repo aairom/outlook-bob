@@ -36,6 +36,10 @@ extract_outlook_token.json
 # Bob MCP config — contains API tokens (Monday JWT, etc.)
 .bob/mcp.json
 
+
+# Prompt files — may contain sensitive instructions, keep local
+prompts/
+
 # Binary / large files — never commit
 *.onnx
 *.onnx.data

@@ -507,7 +507,83 @@ sqlite3 electron-outlook/output/emails.sqlite \
 
 ---
 
-## 7. Stop the app
+## 7. EML → Monday Triage (Bob Agent workflow)
+
+Exported `.eml` files can be processed by **Bob** (AI agent), which reads each email,
+applies your prompt instructions to extract structured data, creates a Monday.com item
+per email, and moves the processed file to a `processed/` subfolder.
+
+### Prerequisites
+
+- Monday API token configured in `.bob/mcp.json` (same token used by the app and the Monday MCP server)
+- At least one `.eml` export folder in `electron-outlook/output/`
+- Bob IDE open in **Agent mode**
+
+### Step 1 — Run the pre-flight script
+
+From the project root:
+
+```bash
+bash scripts/process-eml-to-monday.sh \
+  --folder  electron-outlook/output/eml_export_TIMESTAMP/ \
+  --prompt  prompts/email-triage.md \
+  --board   <your-monday-board-id>
+```
+
+The script will:
+- Validate that the folder and prompt file exist
+- Count the `.eml` files to process
+- Create the `processed/` subfolder
+- Print a ready-to-paste instruction for Bob
+
+> **Where is my Monday board ID?** Open the board in Monday.com — the numeric ID is in the URL:
+> `https://your-org.monday.com/boards/`**`1234567890`**
+
+### Step 2 — Paste the instruction into Bob
+
+Copy the instruction printed by the script and paste it into Bob (Agent mode).
+Bob will automatically activate the `eml-to-monday` skill and:
+
+1. Read your prompt file (`prompts/email-triage.md`)
+2. Find all `.eml` files in the folder recursively
+3. For each file:
+   - Read the email content
+   - Apply your prompt to extract: sender, date, urgency, category, summary, action items
+   - Create a Monday item (email subject → item name)
+   - Post a formatted note as an item update
+   - Move the `.eml` to `processed/`
+4. Print a summary table of all created items
+
+### Step 3 — Customise your prompt (optional)
+
+Edit `prompts/email-triage.md` to change what is extracted or how the Monday note is formatted.
+The file is gitignored — it stays local and never gets pushed to GitHub.
+
+```
+prompts/
+└── email-triage.md    ← edit this to customise extraction instructions
+```
+
+### File states
+
+| State | Location |
+|---|---|
+| Waiting to be processed | `<eml_folder>/` |
+| Successfully sent to Monday | `<eml_folder>/processed/` |
+| Failed (Monday API error) | Stays in `<eml_folder>/` — safe to retry |
+
+### What gets created in Monday
+
+| Email field | Monday destination |
+|---|---|
+| Subject | Item name |
+| Sender · Date · Urgency · Category | Formatted update note |
+| Summary | Update note |
+| Action items | Bullet list in the update note |
+
+---
+
+## 8. Stop the app
 
 **macOS / Linux:**
 ```bash
@@ -521,7 +597,7 @@ powershell -ExecutionPolicy Bypass -File scripts\stop-electron-outlook.ps1
 
 ---
 
-## 8. Force re-login (clear token cache)
+## 9. Force re-login (clear token cache)
 
 **macOS / Linux:**
 ```bash

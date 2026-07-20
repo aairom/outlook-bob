@@ -342,6 +342,52 @@ flowchart LR
 **Download the latest build:**
 Go to the [**Releases**](../../releases) tab and download the `.dmg` from the most recent `build-*` pre-release.
 
+## EML → Monday Triage (Bob Agent workflow)
+
+Exported `.eml` files can be processed by **Bob** (AI agent) using a local prompt file,
+creating a Monday.com item per email and moving each processed file to a `processed/`
+subfolder — no extra credentials needed beyond the existing Monday token in `.bob/mcp.json`.
+
+### How it works
+
+1. Run the pre-flight helper to validate inputs and list files:
+   ```bash
+   bash scripts/process-eml-to-monday.sh \
+     --folder  electron-outlook/output/eml_export_TIMESTAMP/ \
+     --prompt  prompts/email-triage.md \
+     --board   <your-monday-board-id>
+   ```
+2. The script prints a ready-to-paste instruction for Bob.
+3. Paste it into Bob (Agent mode) — Bob reads each `.eml`, applies your prompt,
+   calls Monday, and moves the file to `processed/`.
+
+### Prompt file
+
+The prompt file lives in the `prompts/` folder (gitignored — stays local):
+
+| File | Purpose |
+|---|---|
+| `prompts/email-triage.md` | Default template — extracts sender, date, urgency, category, summary, action items |
+
+Edit `prompts/email-triage.md` to customise what is extracted and how the Monday note is formatted.
+
+### What Bob creates in Monday
+
+| Email field | Monday destination |
+|---|---|
+| Subject | Item name (`create_item`) |
+| Sender · Date · Urgency · Category · Summary · Action items | Formatted update note (`create_update`) |
+
+### File movement
+
+| File state | Location |
+|---|---|
+| Waiting to be processed | `<eml_folder>/` |
+| Successfully sent to Monday | `<eml_folder>/processed/` |
+| Failed (Monday API error) | Stays in `<eml_folder>/` for retry |
+
+---
+
 ## Scripts
 
 | Script | Purpose |
@@ -350,6 +396,7 @@ Go to the [**Releases**](../../releases) tab and download the `.dmg` from the mo
 | `scripts/stop-electron-outlook.sh` | Stop the app gracefully |
 | `scripts/start-electron-outlook.ps1` | Build TypeScript + open desktop window (Windows) |
 | `scripts/stop-electron-outlook.ps1` | Stop the app gracefully (Windows) |
+| `scripts/process-eml-to-monday.sh` | Pre-flight check for EML → Monday triage (macOS / Linux) |
 
 ## Licence
 
