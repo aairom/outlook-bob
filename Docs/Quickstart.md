@@ -507,19 +507,57 @@ sqlite3 electron-outlook/output/emails.sqlite \
 
 ---
 
-## 7. EML → Monday Triage (Bob Agent workflow)
+## 7. EML → Monday Triage
 
-Exported `.eml` files can be processed by **Bob** (AI agent), which reads each email,
-applies your prompt instructions to extract structured data, creates a Monday.com item
-per email, and moves the processed file to a `processed/` subfolder.
+Exported `.eml` files can be triaged in two ways — pick whichever suits your need.
 
-### Prerequisites
+> **Where is my Monday board ID?** Click **📋 View My Boards** — the board ID appears in the meta line of every board row as `ID: 1234567890`.
 
-- Monday API token configured in `.bob/mcp.json` (same token used by the app and the Monday MCP server)
+---
+
+### Option A — Built-in App Card (no Bob required)
+
+The **EML → Monday Triage** card is visible at the bottom of the app window.
+
+**Prerequisites:**
+- Monday API token configured in `.bob/mcp.json`
+- At least one `.eml` export folder
+
+**Steps:**
+
+1. In the **EML → Monday Triage** card, click **Browse…** next to **📁 EML folder** and select the folder containing your `.eml` files.
+2. Click **Browse…** next to **📄 Prompt file** and select your triage prompt (e.g. `prompts/email-triage.md`).
+3. Enter the numeric **🏷️ Board ID** — copy it from the **Monday.com Boards** list (shown as `ID: …` per row).
+4. Click **▶ Run Triage**.
+
+The app will:
+- Scan the folder recursively for `.eml` files (skipping any `processed/` subfolder)
+- Parse each email's headers and body
+- Infer urgency (🔴 High / 🟡 Medium / 🟢 Low) and category from keywords
+- Create a Monday item per email (subject → item name)
+- Post a formatted update note (From · Date · Urgency · Category · Summary)
+- Move each successfully processed file to `<folder>/processed/`
+- Stream live progress in the log area
+- Display a results table with Monday item IDs and any errors
+
+| State | Location |
+|---|---|
+| Waiting to be processed | `<eml_folder>/` |
+| Successfully sent to Monday | `<eml_folder>/processed/` |
+| Failed (Monday API error) | Stays in `<eml_folder>/` — safe to retry |
+
+---
+
+### Option B — Bob Agent workflow (AI-powered extraction)
+
+Use this option when you want AI-powered analysis — richer summaries, action item extraction, and full control over what goes into Monday via a custom prompt.
+
+**Prerequisites:**
+- Monday API token configured in `.bob/mcp.json`
 - At least one `.eml` export folder in `electron-outlook/output/`
 - Bob IDE open in **Agent mode**
 
-### Step 1 — Run the pre-flight script
+**Step 1 — Run the pre-flight script**
 
 From the project root:
 
@@ -530,56 +568,25 @@ bash scripts/process-eml-to-monday.sh \
   --board   <your-monday-board-id>
 ```
 
-The script will:
-- Validate that the folder and prompt file exist
-- Count the `.eml` files to process
-- Create the `processed/` subfolder
-- Print a ready-to-paste instruction for Bob
+The script validates inputs, creates the `processed/` subfolder, and prints a ready-to-paste instruction for Bob.
 
-> **Where is my Monday board ID?** Open the board in Monday.com — the numeric ID is in the URL:
-> `https://your-org.monday.com/boards/`**`1234567890`**
+**Step 2 — Paste the instruction into Bob**
 
-### Step 2 — Paste the instruction into Bob
+Copy the printed instruction and paste it into Bob (Agent mode). Bob activates the `eml-to-monday` skill automatically and:
 
-Copy the instruction printed by the script and paste it into Bob (Agent mode).
-Bob will automatically activate the `eml-to-monday` skill and:
+1. Reads your prompt file (`prompts/email-triage.md`)
+2. Finds all `.eml` files in the folder recursively
+3. For each file: reads content → applies AI extraction → creates Monday item → posts update note → moves file to `processed/`
+4. Prints a summary table of created items
 
-1. Read your prompt file (`prompts/email-triage.md`)
-2. Find all `.eml` files in the folder recursively
-3. For each file:
-   - Read the email content
-   - Apply your prompt to extract: sender, date, urgency, category, summary, action items
-   - Create a Monday item (email subject → item name)
-   - Post a formatted note as an item update
-   - Move the `.eml` to `processed/`
-4. Print a summary table of all created items
+**Step 3 — Customise your prompt (optional)**
 
-### Step 3 — Customise your prompt (optional)
-
-Edit `prompts/email-triage.md` to change what is extracted or how the Monday note is formatted.
-The file is gitignored — it stays local and never gets pushed to GitHub.
-
-```
-prompts/
-└── email-triage.md    ← edit this to customise extraction instructions
-```
-
-### File states
-
-| State | Location |
-|---|---|
-| Waiting to be processed | `<eml_folder>/` |
-| Successfully sent to Monday | `<eml_folder>/processed/` |
-| Failed (Monday API error) | Stays in `<eml_folder>/` — safe to retry |
-
-### What gets created in Monday
+Edit `prompts/email-triage.md` to control what is extracted and how the Monday note is formatted. The `prompts/` folder is gitignored — it stays local and is never pushed to GitHub.
 
 | Email field | Monday destination |
 |---|---|
 | Subject | Item name |
-| Sender · Date · Urgency · Category | Formatted update note |
-| Summary | Update note |
-| Action items | Bullet list in the update note |
+| Sender · Date · Urgency · Category · Summary · Action items | Formatted update note |
 
 ---
 

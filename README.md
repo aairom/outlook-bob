@@ -62,6 +62,7 @@ The app includes a **Monday.com Boards** card at the bottom of the window. Click
 | Item count | `boards.items_count` |
 | Status badge | `boards.state` (Active / other) |
 | Kind icon | 🌐 public · 🔒 private · 🔗 share |
+| **Board ID** | `boards.id` — shown in the meta line for use in EML Triage |
 
 **Token configuration:** the app reads the Monday API token automatically from `.bob/mcp.json` (the same token used by the Monday MCP server). No additional setup is needed if the MCP is already configured.
 
@@ -342,7 +343,27 @@ flowchart LR
 **Download the latest build:**
 Go to the [**Releases**](../../releases) tab and download the `.dmg` from the most recent `build-*` pre-release.
 
-## EML → Monday Triage (Bob Agent workflow)
+## EML → Monday Triage
+
+Exported `.eml` files can be triaged in two ways — directly from the app UI, or via the Bob Agent workflow.
+
+### Option A — Built-in App Card (no Bob required)
+
+The **EML → Monday Triage** card (bottom of the app window) handles everything inside the app:
+
+1. Click **📁 EML folder** → browse to your `.eml` export directory
+2. Click **📄 Prompt file** → select a `.md` or `.txt` prompt file
+3. Enter your **🏷️ Board ID** (copy from the Monday Boards list — shown as `ID: …` per row)
+4. Click **▶ Run Triage** — the app processes every `.eml` file:
+   - Parses headers (subject, sender, date) and strips HTML body to plain text
+   - Infers urgency (🔴/🟡/🟢) and category from subject/body keywords
+   - Creates a Monday item (subject → item name)
+   - Posts a formatted note (sender · date · urgency · category · summary)
+   - Moves each processed file to `<folder>/processed/`
+5. Live progress log and results table show item IDs and any errors
+6. Failed files remain in the source folder — safe to retry
+
+### Option B — Bob Agent workflow (AI-powered extraction)
 
 Exported `.eml` files can be processed by **Bob** (AI agent) using a local prompt file,
 creating a Monday.com item per email and moving each processed file to a `processed/`

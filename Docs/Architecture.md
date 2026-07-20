@@ -371,7 +371,37 @@ Duplicate filenames within the same folder are disambiguated by appending `_1`, 
 
 ---
 
-## EML → Monday Triage (Bob Agent workflow)
+## EML → Monday Triage
+
+Exported `.eml` files can be triaged in two ways.
+
+### Option A — Built-in App Card
+
+The **EML → Monday Triage** card is built into the app window (below the Monday Items card).
+It processes `.eml` files entirely inside the Electron main process — no Bob or external agent needed.
+
+**Flow:**
+1. User picks an EML folder via native OS dialog (`show-open-dialog`)
+2. User picks a prompt file (`.md` / `.txt`) via native OS dialog
+3. User enters the Monday board ID (visible in the Boards list as `ID: …`)
+4. User clicks **▶ Run Triage** — for each `.eml` file:
+   - `parseEmlHeaders()` extracts Subject, From, Date
+   - `parseEmlBody()` / `stripHtml()` extracts plain-text body
+   - Rule-based urgency (🔴/🟡/🟢) and category inferred from keywords
+   - `create_item` GraphQL mutation → item name = subject
+   - `create_update` GraphQL mutation → formatted note with all extracted fields
+   - `fs.renameSync()` moves processed file to `<folder>/processed/`
+5. `eml-triage-progress` IPC events stream live log lines to the renderer
+6. Final `process-eml-folder` response returns results array for the summary table
+
+| Extracted field | Monday destination |
+|---|---|
+| Subject | Item name (`create_item`) |
+| From · Date · Urgency · Category · Summary | Formatted update note (`create_update`) |
+| Prompt file content (first 500 chars) | Embedded in update note for traceability |
+| Source filename | Embedded in update note |
+
+### Option B — Bob Agent workflow
 
 A companion workflow lets **Bob** (AI agent) process exported `.eml` files using a local
 prompt file, create Monday items, and move processed files to a `processed/` subfolder.
