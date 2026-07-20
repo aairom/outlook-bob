@@ -32,8 +32,8 @@ sequence — no state is persisted between sessions. Box connection state is pre
 
 ```mermaid
 flowchart TD
-    ENV[".env (project root)\nCLIENT_ID · EXCLUDED_DOMAIN\nREDIRECT_URI · LOGIN_HINT"]
-    MCPCFG[".bob/mcp.json (project root)\nMonday API token"]
+    ENV[".env (project root)\nCLIENT_ID · EXCLUDED_DOMAIN\nREDIRECT_URI · LOGIN_HINT\nMONDAY_API_TOKEN (fallback)"]
+    MCPCFG[".bob/mcp.json (project root)\nMonday API token (preferred)"]
 
     subgraph App["electron-outlook — Electron Desktop App"]
         MAIN["main.ts\nMain process\nAuth · Graph API · Export logic · ZIP\nMonday GraphQL client · Preview handler\nEmail→Monday item+update handler"]
@@ -200,15 +200,26 @@ Emails browsed in **Preview** mode can be pushed directly to a Monday board as i
 
 ### Token resolution
 
-At startup, `main.ts` scans three candidate paths for `.bob/mcp.json` and extracts
-`mcpServers.monday.headers.Authorization`. The first match wins:
+At startup, `main.ts` resolves the Monday API token using the following priority order
+(first non-empty value wins):
+
+| Priority | Source | How to set |
+|---|---|---|
+| **1st — preferred** | `.bob/mcp.json` `mcpServers.monday.headers.Authorization` | Bob MCP server config (§ 3 of Quickstart) |
+| **2nd — fallback** | `MONDAY_API_TOKEN` environment variable | `.env` file at project root |
+
+The three `.bob/mcp.json` candidate paths tried in order:
 
 1. `<__dirname>/../../../.bob/mcp.json` ← dev (source) layout
 2. `<__dirname>/../../.bob/mcp.json` ← alternative dev layout
 3. `<process.resourcesPath>/.bob/mcp.json` ← packaged app layout
 
-If no token is found, `MONDAY_API_TOKEN` is `null` and the IPC handler returns an error
-sent via the `monday-error` channel.
+If neither source provides a token, `MONDAY_API_TOKEN` is `null` and `mondayGraphQL()`
+rejects with an error sent via the `monday-error` IPC channel to the renderer.
+
+Both sources produce **identical runtime behaviour** — all Monday features (View Boards,
+board items, Send to Monday / create item + update) work the same way regardless of
+which source provides the token.
 
 ### GraphQL query
 

@@ -2,22 +2,23 @@
 
 # Project Context Guide: If Links provide here, always check the links provided here to access the source code repositories for implementation
 
-# Project Structure: 
+# Project Structure
 
    - All the Documents except "readme.md" should be in "Docs" folder under the parent folder
    - All the BASH scripts if needed, should be written in "scripts" folder under the parent folder
 
 
-# Input folder:
+# Input folder
    - All the input documents are to be found in "input" folder under the parent folder
    - All the documents in "input" folder should be processed recurssively.
 
 
-# Output folder:
+# Output folder
    - All the output documents which are asked to be provided should be writen in timestamped format in "output" folder
    - The result documents should be written in "output" folder, if the "output" folder does not exist, it should be created
+   - For this project ".eml" extractions should be extracted in a sub-folder on the local disk with the name of the email origine, and the file name should be filestamped with the "subject" of the email in the name of ".eml" file
 
-# Automation Scripts:
+# Automation Scripts
    - All the BASH scripts, should be written in "scripts" folder under the parent folder
    - Provide a script to lauch the application in detached mode which displays the URL to access the application on the console
    - Provide a script to shutdown the application gracefully
@@ -47,18 +48,18 @@
 
    - When you make updates/enhancements and/or correct the bugs, update the existing documents and scripts, don't create new ones
 
-# Files:
+# Files
 
    - Files in the folders which were not made by you, don't delete them
 
-# Python Rules:
+# Python Rules
 
    - Always provide a virtual environment for Python applications.
 
-# MacOS:
+# MacOS
    - On a MacOS platform, don't use the port 5000, it is reserved for the "AirDrop" application
 
-# Local LLM:
+# Local LLM
    - Ollama is locally installed
 
 # Internet Search
