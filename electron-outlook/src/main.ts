@@ -502,12 +502,7 @@ function buildMessageExportIdentity(msg: Record<string, unknown>): MessageExport
 
 // ── Output directory ──────────────────────────────────────────────────────────
 function getOutputDir(): string {
-  const candidates = [
-    path.join(app.getAppPath(), "..", "output"),
-    path.join(process.cwd(), "..", "output"),
-    path.join(process.cwd(), "output"),
-  ];
-  const dir = candidates[0];
+  const dir = path.resolve(app.getAppPath(), "..", "..", "output");
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
