@@ -298,8 +298,8 @@ After launch:
 
 #### Option A — Download a pre-built installer (recommended)
 
-Every push to `main` automatically builds and publishes fresh macOS and Windows installers via GitHub Actions.
-No local packaging steps are required to get downloadable artifacts from CI.
+Installers are distributed through GitHub Releases. Every push to `main` automatically builds and publishes fresh macOS and Windows installers via GitHub Actions.
+No local packaging steps are required for normal use.
 
 1. Go to the repository's **Releases** tab on GitHub.
 2. Open the latest `build-*` pre-release.
@@ -309,9 +309,9 @@ No local packaging steps are required to get downloadable artifacts from CI.
 
 > The workflow runs on every push that changes the Electron source — you always find the latest desktop installers in Releases.
 
-#### Option B — Build locally
+#### Option B — Build locally (fallback only)
 
-If you need to build the installers yourself:
+Use this only when you need a development build, want to test packaging locally, or no suitable GitHub Release asset is available:
 
 **macOS installer build:**
 ```bash
@@ -332,7 +332,21 @@ npm run pack:win
 - macOS / Linux: [`scripts/build-electron-outlook-release.sh`](../scripts/build-electron-outlook-release.sh)
 - Windows: [`scripts/build-electron-outlook-release.ps1`](../scripts/build-electron-outlook-release.ps1)
 
-These scripts install dependencies and generate the platform installer into [`electron-outlook/dist/`](../electron-outlook/dist).
+Run them from the project root:
+
+**macOS / Linux:**
+```bash
+./scripts/build-electron-outlook-release.sh
+```
+
+**Windows (PowerShell):**
+```powershell
+powershell -ExecutionPolicy Bypass -File scripts\build-electron-outlook-release.ps1
+```
+
+The shell script is executable and can be run directly on macOS/Linux. Both scripts install dependencies and generate the platform installer into [`electron-outlook/dist/`](../electron-outlook/dist).
+
+> Never commit generated binaries or packaging outputs such as `.dmg`, `.exe`, or files from [`electron-outlook/dist/`](../electron-outlook/dist) into the repository. Distribute installers through GitHub Releases instead.
 
 What these commands do:
 - `npm run pack:mac` builds a macOS `.dmg` installer package.

@@ -170,10 +170,14 @@ npm start
 
 Installer and packaging commands write their output to the [`electron-outlook/dist/`](electron-outlook/dist) folder.
 
+Installers are distributed to users through GitHub Releases. Local installer builds are a fallback for development, testing, or when a release asset is not yet available. Built binaries such as `.dmg`, `.exe`, and other packaging outputs must never be committed into the repository.
+
 Common commands:
 - [`npm run build`](electron-outlook/package.json:7) compiles TypeScript into [`electron-outlook/dist/`](electron-outlook/dist) runtime files
 - [`npm run pack:mac`](electron-outlook/package.json:10) creates macOS installer output such as a `.dmg`
 - [`npm run pack:win`](electron-outlook/package.json:11) creates Windows installer output such as an NSIS `.exe`
+- [`./scripts/build-electron-outlook-release.sh`](scripts/build-electron-outlook-release.sh) runs the executable macOS/Linux release script from the project root
+- [`powershell -ExecutionPolicy Bypass -File scripts/build-electron-outlook-release.ps1`](scripts/build-electron-outlook-release.ps1) runs the Windows release script from the project root
 
 When the app starts successfully, the **Outlook Folder Extractor** desktop window opens and you can click **Connect to Microsoft**.
 
