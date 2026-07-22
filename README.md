@@ -64,7 +64,7 @@ The app includes a **Monday.com Boards** card at the bottom of the window. Click
 | Kind icon | 🌐 public · 🔒 private · 🔗 share |
 | **Board ID** | `boards.id` — shown in the meta line for use in EML Triage |
 
-**Token configuration:** the app reads the Monday API token automatically from `.bob/mcp.json` (the same token used by the Monday MCP server). No additional setup is needed if the MCP is already configured.
+**Token configuration:** the app reads the Monday API token automatically from workspace-root `.bob/mcp.json` (the same token used by the Monday MCP server), or falls back to workspace-root `.env` via `MONDAY_API_TOKEN`. This works with both launcher scripts and manual `npm start`.
 
 > If the token is not found or is invalid, an error message is shown inline in the card.
 
@@ -117,7 +117,7 @@ The selection bar shows a live status:
 
 No Azure App Registration needed — uses Microsoft's public Graph Explorer client by default.
 
-The Monday.com integration requires a valid API token in `.bob/mcp.json`. If the Monday MCP server is already configured, no extra steps are needed.
+The Monday.com integration requires a valid API token in workspace-root `.bob/mcp.json`, or `MONDAY_API_TOKEN` in workspace-root `.env`. If the Monday MCP server is already configured, no extra steps are needed.
 
 ## Quickstart
 
@@ -141,6 +141,8 @@ cp .env.example .env
 ```
 
 ### 3. Launch from the project root
+
+The launcher scripts read Monday credentials from workspace-root `.bob/mcp.json` and `.env`, matching the behaviour of manual `npm start`.
 
 **macOS / Linux:**
 ```bash
@@ -268,9 +270,9 @@ When **🔵 OneDrive** or **💻+🔵 Both (OneDrive)** is selected:
 
 Supports files up to 4 MB via simple upload, and larger files via resumable chunked upload automatically.
 
-### Monday.com token (`.bob/mcp.json`)
+### Monday.com token (`.bob/mcp.json` or `.env`)
 
-The Monday API token is read from `.bob/mcp.json` at the project root — the same file used by the Monday MCP server in Bob:
+The Monday API token is read from `.bob/mcp.json` at the workspace root — the same file used by the Monday MCP server in Bob. If that file does not provide a token, the app falls back to `MONDAY_API_TOKEN` from workspace-root `.env`.
 
 ```json
 {
@@ -286,7 +288,7 @@ The Monday API token is read from `.bob/mcp.json` at the project root — the sa
 }
 ```
 
-The app searches for this file relative to its runtime location. If the token is absent or the file does not exist, the **View My Boards** button shows an error and no data is fetched.
+The app searches these config files across the supported source and launcher layouts so both [`scripts/start-electron-outlook.sh`](scripts/start-electron-outlook.sh), [`scripts/start-electron-outlook.ps1`](scripts/start-electron-outlook.ps1), and manual [`npm start`](electron-outlook/package.json:8) resolve the same token. If the token is absent from both sources, the **View My Boards** button shows an error and no data is fetched.
 
 ## Output
 
@@ -413,9 +415,9 @@ Edit `prompts/email-triage.md` to customise what is extracted and how the Monday
 
 | Script | Purpose |
 |---|---|
-| `scripts/start-electron-outlook.sh` | Build TypeScript + open desktop window (macOS / Linux) |
+| `scripts/start-electron-outlook.sh` | Build TypeScript + open desktop window (macOS / Linux); reads Monday credentials from workspace-root `.bob/mcp.json` / `.env` |
 | `scripts/stop-electron-outlook.sh` | Stop the app gracefully |
-| `scripts/start-electron-outlook.ps1` | Build TypeScript + open desktop window (Windows) |
+| `scripts/start-electron-outlook.ps1` | Build TypeScript + open desktop window (Windows); reads Monday credentials from workspace-root `.bob/mcp.json` / `.env` |
 | `scripts/stop-electron-outlook.ps1` | Stop the app gracefully (Windows) |
 | `scripts/process-eml-to-monday.sh` | Pre-flight check for EML → Monday triage — Bob Agent workflow (macOS / Linux) |
 | `scripts/github-push.sh` | Convenience script to commit and push changes to GitHub |

@@ -16,6 +16,9 @@ For full details see [`Docs/Quickstart.md`](../Docs/Quickstart.md).
 
 ### Launch
 
+All launch methods resolve Monday credentials from workspace-root `.bob/mcp.json` first,
+then fall back to workspace-root `.env` via `MONDAY_API_TOKEN`.
+
 ```bash
 # macOS / Linux
 bash scripts/start-electron-outlook.sh
@@ -59,7 +62,7 @@ rm ~/.cache/extract_outlook_token_folder.json
 9. **Date filter** *(optional)* — limit scan to emails since a given date
 10. **ZIP output** *(optional)* — check "📦 Compress output as ZIP file" (in the run card, above the Run button) to compress the result; original file/directory is removed after ZIP is created
 11. **Run Extraction** — live progress log; click **Open Output** when done
-12. **View Monday Boards** *(optional, independent)* — scroll to the **Monday.com Boards** card and click **📋 View My Boards**; requires a valid Monday API token in `.bob/mcp.json`
+12. **View Monday Boards** *(optional, independent)* — scroll to the **Monday.com Boards** card and click **📋 View My Boards**; requires a valid Monday API token in workspace-root `.bob/mcp.json` or `MONDAY_API_TOKEN` in workspace-root `.env`
 
 ---
 
@@ -81,7 +84,7 @@ rm ~/.cache/extract_outlook_token_folder.json
 
 ---
 
-## Configuration (`.env` at project root)
+## Configuration (workspace-root `.env` and `.bob/mcp.json`)
 
 | Variable | Default | Description |
 |---|---|---|
@@ -89,6 +92,12 @@ rm ~/.cache/extract_outlook_token_folder.json
 | `EXCLUDED_DOMAIN` | `.ibm.com` | Default pre-fill for the domain filter in the UI |
 | `REDIRECT_URI` | `http://localhost:8765` | OAuth callback URI |
 | `LOGIN_HINT` | _(empty)_ | Microsoft account email to pre-select at sign-in |
+| `MONDAY_BASE_URL` | `https://monday.com` | Base URL used to build Monday item links in the UI |
+| `MONDAY_API_TOKEN` | _(empty)_ | Fallback Monday API token when workspace-root `.bob/mcp.json` does not provide `mcpServers.monday.headers.Authorization` |
+
+Monday token priority:
+1. workspace-root `.bob/mcp.json` → `mcpServers.monday.headers.Authorization`
+2. workspace-root `.env` → `MONDAY_API_TOKEN`
 
 ---
 
