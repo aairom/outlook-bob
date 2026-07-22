@@ -502,9 +502,12 @@ function buildMessageExportIdentity(msg: Record<string, unknown>): MessageExport
 
 // ── Output directory ──────────────────────────────────────────────────────────
 function getOutputDir(): string {
-  const dir = app.isPackaged
-    ? path.join(app.getPath("userData"), "output")
-    : path.join(app.getAppPath(), "output");
+  const candidates = [
+    path.join(app.getAppPath(), "..", "output"),
+    path.join(process.cwd(), "..", "output"),
+    path.join(process.cwd(), "output"),
+  ];
+  const dir = candidates[0];
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -1510,6 +1513,11 @@ ipcMain.handle("process-eml-folder", async (
     const promptPath = promptContent.slice(5);
     try { promptContent = fs.readFileSync(promptPath, "utf-8"); }
     catch { promptContent = `(prompt file not found: ${promptPath})`; }
+  }
+  if (!promptContent.trim()) {
+    const fallbackPromptPath = path.join(app.getAppPath(), "..", ".bob", "skills", "eml-to-monday.md");
+    try { promptContent = fs.readFileSync(fallbackPromptPath, "utf-8"); }
+    catch { promptContent = ""; }
   }
   const onProgress = (msg: string) => send("eml-triage-progress", { message: msg });
 

@@ -559,7 +559,7 @@ Click **"Open Output"** to open the result file or folder.
 
 ## 7. Output
 
-All exports go to `electron-outlook/output/` (gitignored):
+All exports go to the workspace-root `output/` folder (gitignored):
 
 ```
 output/
@@ -611,7 +611,7 @@ CREATE TABLE emails (
 
 Query example:
 ```bash
-sqlite3 electron-outlook/output/emails.sqlite \
+sqlite3 output/emails.sqlite \
   "SELECT sent_datetime, from_email, subject FROM emails ORDER BY sent_datetime DESC LIMIT 20;"
 ```
 
@@ -638,13 +638,13 @@ Exported `.eml` files can be triaged in two ways — pick whichever suits your n
 The **EML → Monday Triage** card is visible at the bottom of the app window.
 
 **Prerequisites:**
-- Monday API token configured in `.bob/mcp.json`
-- At least one `.eml` export folder
+- Monday API token configured in workspace-root `.bob/mcp.json` or workspace-root `.env`
+- At least one `.eml` export folder in workspace-root `output/`
 
 **Steps:**
 
 1. In the **EML → Monday Triage** card, click **Browse…** next to **📁 EML folder** and select the folder containing your `.eml` files.
-2. Click **Browse…** next to **📄 Prompt file** and select your triage prompt (e.g. `prompts/email-triage.md`).
+2. Optionally click **Browse…** next to **📄 Prompt file** and select your triage prompt (e.g. `prompts/email-triage.md`). If you leave it empty, the app uses [`.bob/skills/eml-to-monday.md`](../.bob/skills/eml-to-monday.md).
 3. Enter the numeric **🏷️ Board ID** — copy it from the **Monday.com Boards** list (shown as `ID: …` per row).
 4. Click **▶ Run Triage**.
 
@@ -671,8 +671,8 @@ The app will:
 Use this option when you want AI-powered analysis — richer summaries, action item extraction, and full control over what goes into Monday via a custom prompt.
 
 **Prerequisites:**
-- Monday API token configured in `.bob/mcp.json`
-- At least one `.eml` export folder in `electron-outlook/output/`
+- Monday API token configured in workspace-root `.bob/mcp.json` or workspace-root `.env`
+- At least one `.eml` export folder in workspace-root `output/`
 - Bob IDE open in **Agent mode**
 
 **Step 1 — Run the pre-flight script**
@@ -681,7 +681,7 @@ From the project root:
 
 ```bash
 bash scripts/process-eml-to-monday.sh \
-  --folder  electron-outlook/output/eml_export_TIMESTAMP/ \
+  --folder  output/eml_export_TIMESTAMP/ \
   --prompt  prompts/email-triage.md \
   --board   <your-monday-board-id>
 ```

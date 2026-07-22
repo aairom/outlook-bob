@@ -1036,7 +1036,8 @@
   <div class="card" id="eml-triage-card">
     <p class="section-title">📂 EML → Monday Triage</p>
     <p style="font-size:12px;color:var(--text-muted);margin-bottom:14px;">
-      Process exported <code>.eml</code> files using a prompt file, create a Monday item per email,
+      Process exported <code>.eml</code> files using a prompt file, or fall back to
+      <code>.bob/skills/eml-to-monday.md</code>, create a Monday item per email,
       and move processed files to a <code>processed/</code> subfolder.
     </p>
 
@@ -2462,7 +2463,7 @@
     let _emlPromptPath  = "";
 
     const updateTriageBtn = () => {
-      btnRunTriage.disabled = !(_emlFolderPath && _emlPromptPath && emlBoardIdInput.value.trim());
+      btnRunTriage.disabled = !(_emlFolderPath && emlBoardIdInput.value.trim());
     };
     emlBoardIdInput.addEventListener("input", updateTriageBtn);
 
@@ -2493,7 +2494,7 @@
 
     btnRunTriage.addEventListener("click", async () => {
       const boardId = emlBoardIdInput.value.trim();
-      if (!_emlFolderPath || !_emlPromptPath || !boardId) return;
+      if (!_emlFolderPath || !boardId) return;
 
       emlTriageLog.textContent = "";
       emlTriageLog.style.display = "block";
@@ -2511,7 +2512,7 @@
       try {
         triageResult = await api.processEmlFolder({
           folderPath:    _emlFolderPath,
-          promptContent: "PATH:" + _emlPromptPath,
+          promptContent: _emlPromptPath ? "PATH:" + _emlPromptPath : "",
           boardId,
         });
       } catch (e) {

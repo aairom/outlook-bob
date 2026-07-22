@@ -26,13 +26,14 @@ Confirm you have all three required inputs before starting. If any are missing, 
 
 | Input | Description | Example |
 |---|---|---|
-| **EML folder path** | Directory containing `.eml` files to process | `electron-outlook/output/eml_export_20250701_120000/` |
-| **Prompt file path** | Markdown file with extraction instructions | `prompts/email-triage.md` |
+| **EML folder path** | Directory containing `.eml` files to process | `output/eml_export_20250701_120000/` |
+| **Prompt file path** | Optional markdown file with extraction instructions | `prompts/email-triage.md` |
 | **Monday board ID** | Numeric ID of the target Monday board | `1234567890` |
 
 ### 2. Read the prompt file
 
-Use `read_file` to load the prompt instructions from the provided prompt file path.
+If a prompt file path is provided, use `read_file` to load the prompt instructions from that file.
+If no prompt file path is provided, use [`.bob/skills/eml-to-monday.md`](.bob/skills/eml-to-monday.md) as the default prompt content.
 
 ### 3. Discover .eml files
 

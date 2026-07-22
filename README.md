@@ -197,7 +197,7 @@ The **Output Destination** card lets you choose where extraction output is saved
 
 | Selection | Behaviour |
 |---|---|
-| 💻 **Local** | Saved to `electron-outlook/output/` only (default) |
+| 💻 **Local** | Saved to workspace-root `output/` only (default) |
 | 📦 **Box Drive** | Copied to your locally-mounted Box Drive folder |
 | ☁️ **Box API** | Uploaded to IBM Enterprise Box via API |
 | 🔵 **OneDrive** | Uploaded to your OneDrive only |
@@ -292,7 +292,7 @@ The app searches these config files across the supported source and launcher lay
 
 ## Output
 
-All exports are written to `electron-outlook/output/` (gitignored).
+All exports are written to the workspace-root `output/` folder (gitignored).
 
 For every message-based export except Recipients CSV, the app now writes a stable export identifier plus Outlook-specific reopen metadata where Microsoft Graph provides it:
 
@@ -354,7 +354,7 @@ Exported `.eml` files can be triaged in two ways — directly from the app UI, o
 The **EML → Monday Triage** card (bottom of the app window) handles everything inside the app:
 
 1. Click **📁 EML folder** → browse to your `.eml` export directory
-2. Click **📄 Prompt file** → select a `.md` or `.txt` prompt file
+2. Optionally click **📄 Prompt file** → select a `.md` or `.txt` prompt file. If left empty, the app uses [`.bob/skills/eml-to-monday.md`](.bob/skills/eml-to-monday.md)
 3. Enter your **🏷️ Board ID** (copy from the Monday Boards list — shown as `ID: …` per row)
 4. Click **▶ Run Triage** — the app processes every `.eml` file:
    - Parses headers (subject, sender, date) and strips HTML body to plain text
@@ -376,7 +376,7 @@ subfolder — no extra credentials needed beyond the existing Monday token in `.
 1. Run the pre-flight helper to validate inputs and list files:
    ```bash
    bash scripts/process-eml-to-monday.sh \
-     --folder  electron-outlook/output/eml_export_TIMESTAMP/ \
+     --folder  output/eml_export_TIMESTAMP/ \
      --prompt  prompts/email-triage.md \
      --board   <your-monday-board-id>
    ```
