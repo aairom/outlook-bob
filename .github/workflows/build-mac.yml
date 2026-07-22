@@ -1,4 +1,4 @@
-name: Build macOS App
+name: Build Desktop Installers
 
 on:
   push:
@@ -16,7 +16,7 @@ permissions:
   contents: write
 
 jobs:
-  build:
+  build-mac:
     name: Build & Package (macOS arm64)
     runs-on: macos-latest
 
@@ -25,11 +25,9 @@ jobs:
         working-directory: electron-outlook
 
     steps:
-      # ── 1. Checkout ────────────────────────────────────────────────────────────
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      # ── 2. Node.js ────────────────────────────────────────────────────────────
       - name: Set up Node.js
         uses: actions/setup-node@v4
         with:
@@ -37,30 +35,82 @@ jobs:
           cache: "npm"
           cache-dependency-path: electron-outlook/package-lock.json
 
-      # ── 3. Install dependencies ───────────────────────────────────────────────
       - name: Install dependencies
         run: npm ci
 
-      # ── 4. Build & Package ────────────────────────────────────────────────────
       - name: Build and package macOS app
         run: npm run pack:mac
         env:
-          # Disable code signing — no Developer ID cert available in CI
           CSC_IDENTITY_AUTO_DISCOVERY: "false"
 
-      # ── 5. Upload DMG as workflow artifact ────────────────────────────────────
-      - name: Upload DMG artifact
+      - name: Upload macOS DMG artifact
         uses: actions/upload-artifact@v4
         with:
           name: Outlook-Folder-Extractor-macOS-arm64
           path: electron-outlook/dist/*.dmg
           retention-days: 30
 
-      # ── 6. Create a GitHub Release on every main push ─────────────────────────
+  build-win:
+    name: Build & Package (Windows)
+    runs-on: windows-latest
+
+    defaults:
+      run:
+        working-directory: electron-outlook
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: electron-outlook/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build and package Windows app
+        run: npm run pack:win
+
+      - name: Upload Windows installer artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: Outlook-Folder-Extractor-Windows
+          path: |
+            electron-outlook/dist/*.exe
+            electron-outlook/dist/*.nsis.7z
+            electron-outlook/dist/latest*.yml
+          retention-days: 30
+
+  release:
+    name: Publish GitHub Release
+    runs-on: ubuntu-latest
+    needs:
+      - build-mac
+      - build-win
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Download macOS artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Outlook-Folder-Extractor-macOS-arm64
+          path: release-assets/mac
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: Outlook-Folder-Extractor-Windows
+          path: release-assets/win
+
       - name: Get short SHA
         id: sha
         run: echo "short=$(git rev-parse --short HEAD)" >> "$GITHUB_OUTPUT"
-        working-directory: ${{ github.workspace }}
 
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
@@ -68,11 +118,14 @@ jobs:
           tag_name: build-${{ steps.sha.outputs.short }}
           name: "Auto-build — ${{ steps.sha.outputs.short }}"
           body: |
-            Automated build from commit `${{ github.sha }}`.
+            Automated desktop installer build from commit `${{ github.sha }}`.
 
             **Branch:** `${{ github.ref_name }}`
             **Triggered by:** ${{ github.actor }}
-          files: electron-outlook/dist/*.dmg
+            **Artifacts:** macOS `.dmg`, Windows `.exe`
+          files: |
+            release-assets/mac/*
+            release-assets/win/*
           prerelease: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

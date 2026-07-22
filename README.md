@@ -320,30 +320,32 @@ output/recipients_20250625_143022.zip    ← ZIP of any of the above (when ZIP o
 
 ## CI / CD — Automated builds
 
-Every push to `main` that modifies the Electron source automatically triggers a GitHub Actions workflow ([`.github/workflows/build-mac.yml`](.github/workflows/build-mac.yml)) that:
+Every push to `main` that modifies the Electron source automatically triggers the GitHub Actions workflow [`.github/workflows/build-mac.yml`](.github/workflows/build-mac.yml), which now builds both macOS and Windows installers.
 
 1. Compiles TypeScript
-2. Packages a macOS `arm64` `.app` + `.dmg` via `electron-builder`
-3. Uploads the `.dmg` as a **workflow artifact** (kept 30 days)
-4. Creates a **GitHub Release** pre-tagged `build-<short-sha>` with the `.dmg` attached
+2. Packages a macOS `arm64` `.dmg` via `electron-builder`
+3. Packages a Windows `.exe` installer via `electron-builder`
+4. Uploads both installer outputs as workflow artifacts (kept 30 days)
+5. Creates a GitHub pre-release tagged `build-<short-sha>` with both installers attached
 
 ```mermaid
 flowchart LR
-    A[git push to main] -->|paths filter| B[GitHub Actions\nmacos-latest]
-    B --> C[npm ci]
-    C --> D[npm run pack:mac]
-    D --> E[dist/*.dmg]
-    E --> F[Workflow artifact\n30-day retention]
-    E --> G[GitHub Release\nbuild-SHA]
+    A[git push to main] -->|paths filter| B[GitHub Actions]
+    B --> C1[macOS job\nnpm ci + npm run pack:mac]
+    B --> C2[Windows job\nnpm ci + npm run pack:win]
+    C1 --> D1[dist/*.dmg]
+    C2 --> D2[dist/*.exe]
+    D1 --> E[Workflow artifacts + GitHub Release]
+    D2 --> E
 ```
 
 **Triggered by changes to:**
 - `electron-outlook/src/**`
-- `electron-outlook/package.json` · `package-lock.json` · `tsconfig.json`
-- `.github/workflows/build-mac.yml`
+- [`electron-outlook/package.json`](electron-outlook/package.json) · [`electron-outlook/package-lock.json`](electron-outlook/package-lock.json) · [`electron-outlook/tsconfig.json`](electron-outlook/tsconfig.json)
+- [`.github/workflows/build-mac.yml`](.github/workflows/build-mac.yml)
 
 **Download the latest build:**
-Go to the [**Releases**](../../releases) tab and download the `.dmg` from the most recent `build-*` pre-release.
+Go to the [**Releases**](../../releases) tab and download the `.dmg` for macOS and/or the `.exe` installer for Windows from the most recent `build-*` pre-release.
 
 ## EML → Monday Triage
 

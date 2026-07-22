@@ -298,19 +298,20 @@ After launch:
 
 #### Option A — Download a pre-built installer (recommended)
 
-Every push to `main` automatically builds and publishes a fresh macOS installer via GitHub Actions.
-No local build tools required.
+Every push to `main` automatically builds and publishes fresh macOS and Windows installers via GitHub Actions.
+No local packaging steps are required to get downloadable artifacts from CI.
 
 1. Go to the repository's **Releases** tab on GitHub.
 2. Open the latest `build-*` pre-release.
-3. Download the `.dmg` file attached to the release.
-4. Open the `.dmg`, drag **Outlook Folder Extractor** into **Applications**.
+3. Download the `.dmg` file for macOS and/or the `.exe` installer for Windows.
+4. On macOS, open the `.dmg` and drag **Outlook Folder Extractor** into **Applications**.
+5. On Windows, run the `.exe` installer.
 
-> The workflow runs on every push that changes the Electron source — you always find the latest build in Releases.
+> The workflow runs on every push that changes the Electron source — you always find the latest desktop installers in Releases.
 
 #### Option B — Build locally
 
-If you need to build the installer yourself:
+If you need to build the installers yourself:
 
 **macOS installer build:**
 ```bash
@@ -320,11 +321,18 @@ npm run pack:mac
 ```
 
 **Windows installer build:**
-```bash
+```powershell
 cd electron-outlook
 npm install
 npm run pack:win
 ```
+
+**One-command local release scripts:**
+
+- macOS / Linux: [`scripts/build-electron-outlook-release.sh`](../scripts/build-electron-outlook-release.sh)
+- Windows: [`scripts/build-electron-outlook-release.ps1`](../scripts/build-electron-outlook-release.ps1)
+
+These scripts install dependencies and generate the platform installer into [`electron-outlook/dist/`](../electron-outlook/dist).
 
 What these commands do:
 - `npm run pack:mac` builds a macOS `.dmg` installer package.
