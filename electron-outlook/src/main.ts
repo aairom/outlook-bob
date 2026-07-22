@@ -12,8 +12,10 @@ import { ZipArchive } from "archiver";
 // ── Load shared .env from project root ────────────────────────────────────────
 const _envCandidates = [
   path.join(__dirname, "..", "..", ".env"),
+  path.join(__dirname, "..", "..", "..", ".env"),
   path.join(process.resourcesPath ?? "", ".env"),
   path.join(process.cwd(), ".env"),
+  path.join(process.cwd(), "..", ".env"),
 ];
 for (const candidate of _envCandidates) {
   if (fs.existsSync(candidate)) { dotenv.config({ path: candidate }); break; }
@@ -1272,6 +1274,8 @@ const MONDAY_API_TOKEN = (() => {
     path.join(__dirname, "..", "..", "..", ".bob", "mcp.json"),
     path.join(__dirname, "..", "..", ".bob", "mcp.json"),
     path.join(process.resourcesPath ?? "", ".bob", "mcp.json"),
+    path.join(process.cwd(), ".bob", "mcp.json"),
+    path.join(process.cwd(), "..", ".bob", "mcp.json"),
   ];
   for (const c of candidates) {
     try {

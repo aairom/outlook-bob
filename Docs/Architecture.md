@@ -32,8 +32,8 @@ sequence — no state is persisted between sessions. Box connection state is pre
 
 ```mermaid
 flowchart TD
-    ENV[".env (project root)\nCLIENT_ID · EXCLUDED_DOMAIN\nREDIRECT_URI · LOGIN_HINT\nMONDAY_API_TOKEN (fallback)"]
-    MCPCFG[".bob/mcp.json (project root)\nMonday API token (preferred)"]
+    ENV[".env (workspace root)\nCLIENT_ID · EXCLUDED_DOMAIN\nREDIRECT_URI · LOGIN_HINT\nMONDAY_API_TOKEN (fallback)"]
+    MCPCFG[".bob/mcp.json (workspace root)\nMonday API token (preferred)"]
 
     subgraph App["electron-outlook — Electron Desktop App"]
         MAIN["main.ts\nMain process\nAuth · Graph API · Export logic · ZIP\nMonday GraphQL client · Preview handler\nEmail→Monday item+update handler"]
@@ -210,13 +210,18 @@ At startup, `main.ts` resolves the Monday API token using the following priority
 | Priority | Source | How to set |
 |---|---|---|
 | **1st — preferred** | `.bob/mcp.json` `mcpServers.monday.headers.Authorization` | Bob MCP server config (§ 3 of Quickstart) |
-| **2nd — fallback** | `MONDAY_API_TOKEN` environment variable | `.env` file at project root |
+| **2nd — fallback** | `MONDAY_API_TOKEN` environment variable | `.env` file at workspace root |
 
-The three `.bob/mcp.json` candidate paths tried in order:
+The `.bob/mcp.json` candidate paths tried in order:
 
 1. `<__dirname>/../../../.bob/mcp.json` ← dev (source) layout
 2. `<__dirname>/../../.bob/mcp.json` ← alternative dev layout
 3. `<process.resourcesPath>/.bob/mcp.json` ← packaged app layout
+4. `<process.cwd()}/.bob/mcp.json` ← launch scripts / app dir working directory
+5. `<process.cwd()}/../.bob/mcp.json` ← workspace root when launched from `electron-outlook`
+
+The `.env` candidate paths include both the app directory and workspace-root layouts so
+launcher scripts and manual `npm start` resolve the same Monday credentials.
 
 If neither source provides a token, `MONDAY_API_TOKEN` is `null` and `mondayGraphQL()`
 rejects with an error sent via the `monday-error` IPC channel to the renderer.

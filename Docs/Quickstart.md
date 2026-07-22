@@ -157,7 +157,7 @@ Copy-Item .env.example .env
 | `REDIRECT_URI` | `http://localhost:8765` | OAuth callback URI — must match Azure registration if using your own `CLIENT_ID` |
 | `LOGIN_HINT` | _(empty)_ | Microsoft account email to pre-select at sign-in |
 | `MONDAY_BASE_URL` | `https://monday.com` | Base URL for your Monday account — used to build item deep-links in the UI |
-| `MONDAY_API_TOKEN` | _(empty)_ | Monday personal API token. Fallback when `.bob/mcp.json` is not present. Get it: monday.com → avatar → Profile → Developer → API → Copy. |
+| `MONDAY_API_TOKEN` | _(empty)_ | Monday personal API token. Fallback when `.bob/mcp.json` is not present. Works with both launcher scripts and manual `npm start`. Get it: monday.com → avatar → Profile → Developer → API → Copy. |
 
 > **Do I need a `CLIENT_ID`?** No — leave it blank. The app works out of the box with
 > Microsoft's public Graph Explorer client. Only fill this in if your organisation
@@ -232,6 +232,10 @@ to `MONDAY_API_TOKEN` from `.env`. Both sources produce identical behaviour — 
 features (View Boards, Send to Monday) work the same way regardless of which source
 provides the token.
 
+The lookup works the same whether you launch with [`bash scripts/start-electron-outlook.sh`](../scripts/start-electron-outlook.sh),
+[`powershell -ExecutionPolicy Bypass -File scripts\start-electron-outlook.ps1`](../scripts/start-electron-outlook.ps1),
+or manual [`npm start`](../electron-outlook/package.json).
+
 | Source | Priority | Best for |
 |---|---|---|
 | `.bob/mcp.json` `Authorization` | **1st — preferred** | Bob users with MCP already configured |
@@ -254,6 +258,7 @@ This script:
 - installs npm packages when needed
 - builds the TypeScript app
 - launches the Electron desktop window
+- reads Monday credentials from workspace-root `.env` and `.bob/mcp.json` the same way as manual `npm start`
 
 **Windows (PowerShell):**
 ```powershell
