@@ -1307,6 +1307,14 @@
       <button id="btn-preview-prompt" title="Preview prompt file" style="display:none; padding:4px 8px; font-size:14px; line-height:1;">👁</button>
     </div>
 
+    <!-- Skill selector -->
+    <div class="eml-triage-row">
+      <label>🧠 Skill</label>
+      <select id="eml-skill-select" style="-webkit-app-region:no-drag; flex:1; min-width:140px; padding:7px 11px; background:var(--input-bg); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:12px; outline:none;">
+        <option value="">— use prompt file above —</option>
+      </select>
+    </div>
+
     <!-- Board ID -->
     <div class="eml-triage-row">
       <label>🏷️ Board ID</label>
@@ -1323,7 +1331,7 @@
       <p class="section-title" style="margin-top:0;">Results</p>
       <table class="triage-result-table">
         <thead><tr>
-          <th>#</th><th>File</th><th>Subject</th><th>Monday item</th><th>Status</th>
+          <th>#</th><th>File</th><th>Subject</th><th>Monday item</th><th>Email</th><th>Status</th>
         </tr></thead>
         <tbody id="eml-triage-tbody"></tbody>
       </table>
@@ -2946,6 +2954,7 @@
     const emlFolderDisplay  = document.getElementById("eml-folder-display");
     const emlPromptDisplay  = document.getElementById("eml-prompt-display");
     const emlBoardIdInput   = document.getElementById("eml-board-id-input");
+    const emlSkillSelect    = document.getElementById("eml-skill-select");
     const btnRunTriage      = document.getElementById("btn-run-triage");
     const emlTriageLog      = document.getElementById("eml-triage-log");
     const emlTriageSummary  = document.getElementById("eml-triage-summary");
@@ -2958,6 +2967,51 @@
       btnRunTriage.disabled = !(_emlFolderPath && emlBoardIdInput.value.trim());
     };
     emlBoardIdInput.addEventListener("input", updateTriageBtn);
+
+    // Auto-paste clipboard when Board ID field is focused and contains only digits
+    emlBoardIdInput.addEventListener("focus", async () => {
+      if (emlBoardIdInput.value.trim()) return; // already has a value
+      try {
+        const text = await navigator.clipboard.readText();
+        if (/^\d{5,}$/.test(text.trim())) {
+          emlBoardIdInput.value = text.trim();
+          updateTriageBtn();
+        }
+      } catch { /* clipboard access denied — do nothing */ }
+    });
+
+    // Load available Bob skills into the selector
+    (async () => {
+      try {
+        const { skills } = await api.listBobSkills();
+        for (const s of skills) {
+          const opt = document.createElement("option");
+          opt.value = s.path;
+          opt.textContent = s.name;
+          emlSkillSelect.appendChild(opt);
+        }
+      } catch { /* skills dir not accessible */ }
+    })();
+
+    // When a skill is chosen it overrides the prompt file selection
+    emlSkillSelect.addEventListener("change", () => {
+      const chosen = emlSkillSelect.value;
+      if (chosen) {
+        _emlPromptPath = chosen;
+        emlPromptDisplay.textContent = chosen.split("/").pop();
+        emlPromptDisplay.classList.remove("placeholder");
+        document.getElementById("btn-edit-prompt").style.display    = "inline-flex";
+        document.getElementById("btn-preview-prompt").style.display = "inline-flex";
+      } else {
+        // Reverted to "use prompt file above" — clear skill-driven path
+        _emlPromptPath = "";
+        emlPromptDisplay.textContent = "No file selected";
+        emlPromptDisplay.classList.add("placeholder");
+        document.getElementById("btn-edit-prompt").style.display    = "none";
+        document.getElementById("btn-preview-prompt").style.display = "none";
+      }
+      updateTriageBtn();
+    });
 
     btnPickEmlFolder.addEventListener("click", async () => {
       const result = await api.showOpenDialog({
@@ -3112,8 +3166,26 @@
             <td style="font-family:monospace;font-size:11px;max-width:180px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.file}">${r.file}</td>
             <td style="max-width:200px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${r.subject}">${r.subject}</td>
             <td>${itemLink}</td>
+            <td></td>
             <td>${status}</td>
           `;
+          // Build the email link via DOM (avoids innerHTML injection)
+          const emailTd = tr.querySelectorAll("td")[4];
+          if (r.webLink) {
+            const a = document.createElement("a");
+            a.className = "monday-item-link";
+            a.href = "#";
+            a.title = "Open original email in Outlook Web";
+            a.textContent = "🔗 Open";
+            a.addEventListener("click", e => {
+              e.preventDefault();
+              api.openFile(r.webLink).catch(() => {});
+            });
+            emailTd.appendChild(a);
+          } else {
+            emailTd.textContent = "—";
+            emailTd.style.color = "#6c7086";
+          }
           emlTriageTbody.appendChild(tr);
         });
       }

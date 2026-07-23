@@ -203,10 +203,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
     promptContent: string;
     boardId: string;
   }): Promise<{
-    results: Array<{ file: string; itemId: string | null; subject: string; error: string | null }>;
+    results: Array<{ file: string; itemId: string | null; subject: string; webLink: string; error: string | null }>;
     processedDir: string;
   }> =>
     ipcRenderer.invoke("process-eml-folder", args),
+
+  listBobSkills: (): Promise<{ skills: Array<{ name: string; path: string }> }> =>
+    ipcRenderer.invoke("list-bob-skills"),
 
   // ── Events ─────────────────────────────────────────────────────────────────
   onProgress: (cb: (message: string) => void) => {

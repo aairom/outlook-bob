@@ -1644,6 +1644,7 @@ interface EmlTriageResult {
   file:    string;
   itemId:  string | null;
   subject: string;
+  webLink: string;
   error:   string | null;
 }
 
@@ -1705,14 +1706,15 @@ ipcMain.handle("process-eml-folder", async (
     catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
       onProgress(`  ❌ Cannot read file: ${errMsg}`);
-      results.push({ file: fileName, itemId: null, subject: "", error: errMsg });
+      results.push({ file: fileName, itemId: null, subject: "", webLink: "", error: errMsg });
       continue;
     }
 
-    const headers = parseEmlHeaders(raw);
-    const subject  = headers["subject"] || "(no subject)";
-    const from     = headers["from"]    || "unknown";
-    const date     = headers["date"]    || "";
+    const headers  = parseEmlHeaders(raw);
+    const subject  = headers["subject"]             || "(no subject)";
+    const from     = headers["from"]                || "unknown";
+    const date     = headers["date"]                || "";
+    const webLink  = headers["x-outlook-web-link"]  || "";
     const bodyText = parseEmlBody(raw);
 
     // Build the prompt payload for this specific email
@@ -1763,6 +1765,7 @@ ipcMain.handle("process-eml-folder", async (
       `📅 Date: ${date}`,
       `🚦 Urgency: ${urgency}`,
       `🏷️ Category: ${category}`,
+      ...(webLink ? [`🔗 Open email: ${webLink}`] : []),
       ``,
       `📝 Summary:`,
       summary,
@@ -1800,11 +1803,11 @@ ipcMain.handle("process-eml-folder", async (
       fs.renameSync(filePath, dest);
       onProgress(`  📁 Moved → processed/${fileName}`);
 
-      results.push({ file: fileName, itemId, subject, error: null });
+      results.push({ file: fileName, itemId, subject, webLink, error: null });
     } catch (e) {
       const errMsg = e instanceof Error ? e.message : String(e);
       onProgress(`  ❌ Monday error: ${errMsg}`);
-      results.push({ file: fileName, itemId: null, subject, error: errMsg });
+      results.push({ file: fileName, itemId: null, subject, webLink, error: errMsg });
     }
   }
 
@@ -1812,6 +1815,27 @@ ipcMain.handle("process-eml-folder", async (
   const err = results.filter(r =>  r.error).length;
   onProgress(`\n🏁 Triage complete: ${ok} created, ${err} failed.`);
   return { results, processedDir };
+});
+
+// ── Bob skills list ──────────────────────────────────────────────────────────
+
+ipcMain.handle("list-bob-skills", async (): Promise<{ skills: Array<{ name: string; path: string }> }> => {
+  const skillsDir = path.join(app.getAppPath(), "..", ".bob", "skills");
+  const skills: Array<{ name: string; path: string }> = [];
+  let entries: string[] = [];
+  try { entries = fs.readdirSync(skillsDir); } catch { return { skills }; }
+  for (const entry of entries) {
+    const full = path.join(skillsDir, entry);
+    const stat = fs.statSync(full);
+    if (stat.isDirectory()) {
+      // Skill stored as a folder — look for SKILL.md inside
+      const mdPath = path.join(full, "SKILL.md");
+      if (fs.existsSync(mdPath)) skills.push({ name: entry, path: mdPath });
+    } else if (entry.endsWith(".md")) {
+      skills.push({ name: entry.replace(/\.md$/, ""), path: full });
+    }
+  }
+  return { skills };
 });
 
 // ── Box integration ───────────────────────────────────────────────────────────
