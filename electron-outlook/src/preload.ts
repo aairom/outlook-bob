@@ -91,9 +91,17 @@ contextBridge.exposeInMainWorld("electronAPI", {
     folderIds: string[];
     folderTree: MailFolder[];
     since?: string;
+    until?: string;
+    forceOverride?: boolean;
     exportParams: ExportParams;
   }): Promise<void> =>
     ipcRenderer.invoke("start-extraction", args),
+
+  getExtractionStats: (): Promise<{ total: number; lastExtractedAt: string | null }> =>
+    ipcRenderer.invoke("get-extraction-stats"),
+
+  clearExtractionHistory: (): Promise<{ ok: boolean }> =>
+    ipcRenderer.invoke("clear-extraction-history"),
 
   openFile: (filePath: string): Promise<void> =>
     ipcRenderer.invoke("open-file", { path: filePath }),
@@ -189,7 +197,7 @@ contextBridge.exposeInMainWorld("electronAPI", {
   listCalendars: (): Promise<{ calendars: Array<{ id: string; displayName: string; color: string; isDefaultCalendar: boolean; canEdit: boolean }> }> =>
     ipcRenderer.invoke("list-calendars"),
 
-  fetchCalendarEvents: (args: { since?: string; limit?: number }): Promise<{ events: unknown[]; error?: string }> =>
+  fetchCalendarEvents: (args: { since?: string; until?: string; limit?: number }): Promise<{ events: unknown[]; error?: string }> =>
     ipcRenderer.invoke("fetch-calendar-events", args),
 
   readFile: (path: string): Promise<{ ok: boolean; content?: string; error?: string }> =>
@@ -216,9 +224,9 @@ contextBridge.exposeInMainWorld("electronAPI", {
     ipcRenderer.on("progress", (_e, payload: { message: string }) => cb(payload.message));
   },
 
-  onDone: (cb: (outputPath: string, count: number, format: string) => void) => {
-    ipcRenderer.on("done", (_e, payload: { outputPath: string; count: number; format: string }) =>
-      cb(payload.outputPath, payload.count, payload.format)
+  onDone: (cb: (outputPath: string, count: number, format: string, skipped: number) => void) => {
+    ipcRenderer.on("done", (_e, payload: { outputPath: string; count: number; format: string; skipped: number }) =>
+      cb(payload.outputPath, payload.count, payload.format, payload.skipped ?? 0)
     );
   },
 

@@ -1204,6 +1204,18 @@
           <input type="date" id="until-date" />
         </div>
         <span id="date-range-error">⚠ "To" date must be after "Since" date.</span>
+        <!-- Force override row -->
+        <div class="date-row" style="margin-top:4px;">
+          <input type="checkbox" id="chk-force-override" style="-webkit-app-region:no-drag; width:14px; height:14px; accent-color:#f38ba8; cursor:pointer; flex-shrink:0;" />
+          <label for="chk-force-override" style="-webkit-app-region:no-drag; cursor:pointer; white-space:nowrap; font-size:12px; color:var(--text-muted); margin-bottom:0; min-width:unset;">
+            ⚡ Force Extraction Override <span style="opacity:.6;">(re-extract already extracted emails)</span>
+          </label>
+        </div>
+        <!-- Extraction history badge -->
+        <div id="extraction-history-badge" style="display:none; margin-top:6px; font-size:11px; color:var(--text-muted); display:flex; align-items:center; gap:10px;">
+          <span id="extraction-history-text"></span>
+          <button id="btn-clear-history" style="-webkit-app-region:no-drag; font-size:10px; padding:2px 7px; background:transparent; border:1px solid var(--border); border-radius:4px; color:var(--text-muted); cursor:pointer;" title="Clear extraction history">🗑 Clear history</button>
+        </div>
       </div>
       <!-- Right: ZIP checkbox, inline with the date block -->
       <div class="date-zip-col">
@@ -1454,9 +1466,13 @@
     const btnPreview      = document.getElementById("btn-preview");
     const btnOpenOutput   = document.getElementById("btn-open-output");
     const btnRunAgain     = document.getElementById("btn-run-again");
-    const sinceDate       = document.getElementById("since-date");
-    const untilDate       = document.getElementById("until-date");
-    const dateRangeError  = document.getElementById("date-range-error");
+    const sinceDate             = document.getElementById("since-date");
+    const untilDate             = document.getElementById("until-date");
+    const dateRangeError        = document.getElementById("date-range-error");
+    const chkForceOverride      = document.getElementById("chk-force-override");
+    const extractionHistoryBadge = document.getElementById("extraction-history-badge");
+    const extractionHistoryText  = document.getElementById("extraction-history-text");
+    const btnClearHistory        = document.getElementById("btn-clear-history");
     const folderCard      = document.getElementById("folder-card");
     const folderLoading   = document.getElementById("folder-loading");
     const folderEmpty     = document.getElementById("folder-empty");
@@ -1471,6 +1487,31 @@
     const emlHint         = document.getElementById("eml-hint");
     const chkFilterDomain      = document.getElementById("chk-filter-domain");
     const excludedDomainInput  = document.getElementById("excluded-domain-input");
+
+    // ── Extraction history badge ──────────────────────────────────────────────
+    async function refreshExtractionHistoryBadge() {
+      try {
+        const { total, lastExtractedAt } = await api.getExtractionStats();
+        if (total === 0) {
+          extractionHistoryBadge.style.display = "none";
+          return;
+        }
+        const lastStr = lastExtractedAt
+          ? new Date(lastExtractedAt).toLocaleString()
+          : "—";
+        extractionHistoryText.textContent = `📋 ${total.toLocaleString()} message(s) in extraction history · last run: ${lastStr}`;
+        extractionHistoryBadge.style.display = "flex";
+      } catch { /* history DB not yet created — badge stays hidden */ }
+    }
+
+    btnClearHistory.addEventListener("click", async () => {
+      await api.clearExtractionHistory();
+      refreshExtractionHistoryBadge();
+      appendLog("🗑 Extraction history cleared.", "info");
+    });
+
+    // Load badge on startup
+    refreshExtractionHistoryBadge();
 
     // ── State ─────────────────────────────────────────────────────────────────
     let lastOutputPath = "";
@@ -2014,16 +2055,20 @@
 
       api.onProgress(msg => appendLog(msg, classifyLine(msg)));
 
-      api.onDone(async (outputPath, count, format) => {
+      api.onDone(async (outputPath, count, format, skipped) => {
         btnExtract.disabled = false;
         btnConnect.disabled = false;
         btnLoadFolders.disabled = false;
         btnRunAgain.style.display = "inline-block";
 
+        // Refresh the history badge after every run
+        refreshExtractionHistoryBadge();
+
         if (count === 0) {
           resultMsg.style.display = "block";
           resultMsg.className = "ok";
-          resultMsg.textContent = "✅ No matching messages found.";
+          const skipNote = skipped ? ` (${skipped} already extracted, skipped)` : "";
+          resultMsg.textContent = "✅ No new messages found." + skipNote;
           return;
         }
 
@@ -2039,13 +2084,15 @@
           "sqlite":         `${count} records upserted into SQLite database`,
         };
         const base = labels[format] || `${count} items exported`;
+        const skipSuffix = skipped ? ` · ${skipped} skipped (already extracted)` : "";
         resultMsg.style.display = "block";
         resultMsg.className = "ok";
-        resultMsg.textContent = "✅ Done — " + base + (zipped ? " (ZIP)" : "");
+        resultMsg.textContent = "✅ Done — " + base + (zipped ? " (ZIP)" : "") + skipSuffix;
         outputPathLink.textContent = outputPath;
         outputPathLink.onclick = () => api.openFile(outputPath);
         outputPathMsg.style.display = "block";
         appendLog("Saved → " + outputPath, "ok");
+        if (skipped) appendLog(`⏭ ${skipped} message(s) skipped (already in extraction history).`, "info");
 
         // ── Box Drive copy (if destination is "boxdrive" or "both-bd") ───────
         if ((selectedDestination === "boxdrive" || selectedDestination === "both-bd") && outputPath) {
@@ -2103,6 +2150,7 @@
         folderTree: cachedFolderTree,
         since: sinceDate.value || undefined,
         until: untilDate.value || undefined,
+        forceOverride: chkForceOverride.checked || undefined,
         exportParams,
       });
     });
@@ -2685,6 +2733,7 @@
       document.getElementById("chk-flagged-only").checked    = false;
       document.getElementById("chk-save-attachments").checked = false;
       document.getElementById("chk-zip-output").checked      = false;
+      document.getElementById("chk-force-override").checked  = false;
 
       // Attachment type chips → All types on, specific chips off
       attAllChk.checked = true;

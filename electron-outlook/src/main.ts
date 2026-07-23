@@ -578,6 +578,77 @@ function timestamp(): string {
   return new Date().toISOString().replace(/[-:T]/g, "").substring(0, 15);
 }
 
+// ── Extraction history (SQLite) ───────────────────────────────────────────────
+/**
+ * Persistent deduplication store.
+ *
+ * Schema:
+ *   extracted_messages
+ *     message_id   TEXT PRIMARY KEY   – Graph message GUID (unique per mailbox)
+ *     export_id    TEXT               – SHA-256(messageId + internetMessageId)
+ *     extracted_at TEXT               – ISO-8601 timestamp of the extraction run
+ *
+ * The DB is stored at output/extraction_history.sqlite so it lives next to the
+ * export files and can be inspected with any SQLite viewer.
+ */
+function getHistoryDbPath(): string {
+  return path.join(getOutputDir(), "extraction_history.sqlite");
+}
+
+let _historyDb: ReturnType<typeof Database> | null = null;
+
+function openHistoryDb(): ReturnType<typeof Database> {
+  if (_historyDb) return _historyDb;
+  const db = new Database(getHistoryDbPath());
+  db.pragma("journal_mode = WAL");
+  db.exec(`
+    CREATE TABLE IF NOT EXISTS extracted_messages (
+      message_id   TEXT PRIMARY KEY,
+      export_id    TEXT,
+      extracted_at TEXT NOT NULL
+    );
+    CREATE INDEX IF NOT EXISTS idx_extracted_at ON extracted_messages (extracted_at);
+  `);
+  _historyDb = db;
+  return db;
+}
+
+/** Returns a Set of messageIds already in the history store. */
+function loadExtractedIds(): Set<string> {
+  const db = openHistoryDb();
+  const rows = db.prepare("SELECT message_id FROM extracted_messages").all() as Array<{ message_id: string }>;
+  return new Set(rows.map((r) => r.message_id));
+}
+
+/** Bulk-inserts (or ignores) a list of {messageId, exportId} records. */
+function recordExtracted(entries: Array<{ messageId: string; exportId: string }>): void {
+  if (!entries.length) return;
+  const db = openHistoryDb();
+  const insert = db.prepare(`
+    INSERT OR IGNORE INTO extracted_messages (message_id, export_id, extracted_at)
+    VALUES (@message_id, @export_id, @extracted_at)
+  `);
+  const extractedAt = new Date().toISOString();
+  const insertAll = db.transaction((rows: Array<{ messageId: string; exportId: string }>) => {
+    for (const r of rows) insert.run({ message_id: r.messageId, export_id: r.exportId, extracted_at: extractedAt });
+  });
+  insertAll(entries);
+}
+
+/** Returns total count and the most recent extraction timestamp. */
+function getExtractionHistoryStats(): { total: number; lastExtractedAt: string | null } {
+  const db = openHistoryDb();
+  const row = db.prepare("SELECT COUNT(*) as total, MAX(extracted_at) as last FROM extracted_messages").get() as
+    { total: number; last: string | null };
+  return { total: row.total, lastExtractedAt: row.last };
+}
+
+/** Wipes the entire history (called when user wants a full reset). */
+function clearExtractionHistory(): void {
+  const db = openHistoryDb();
+  db.exec("DELETE FROM extracted_messages");
+}
+
 // ── ZIP helper ────────────────────────────────────────────────────────────────
 /**
  * Compresses `sourcePath` (file or directory) into a timestamped .zip archive
@@ -616,17 +687,20 @@ function wrapWithZip(sourcePath: string, onProgress: (msg: string) => void): Pro
 async function runRecipientsExport(
   token: string, folders: MailFolder[], since: string | undefined,
   params: ExportParams, onProgress: (msg: string) => void,
-  until?: string
-): Promise<{ filePath: string; count: number }> {
+  until?: string, extractedIds?: Set<string>
+): Promise<{ filePath: string; count: number; skipped: number }> {
   const selectFields = buildSelectFields(params);
   const recipients = new Map<string, Recipient>();
-  let total = 0;
+  const newEntries: Array<{ messageId: string; exportId: string }> = [];
+  let total = 0; let skipped = 0;
 
   onProgress(`Scanning ${folders.length} folder(s) for recipients…`);
   for (const folder of folders) {
     onProgress(`📁 ${folder.displayName}…`);
     for await (const msg of iterFolderMessages(token, folder.id, since, selectFields, true, until)) {
       total++;
+      const identity = buildMessageExportIdentity(msg);
+      if (extractedIds?.has(identity.messageId)) { skipped++; continue; }
       if (params.flaggedOnly) {
         const flagStatus = ((msg["flag"] as Record<string,string>|undefined)?.["flagStatus"]) ?? "";
         if (flagStatus !== "flagged") continue;
@@ -645,10 +719,12 @@ async function runRecipientsExport(
             recipients.set(email, { name, email, date: sentDate.toISOString() });
         }
       }
+      newEntries.push({ messageId: identity.messageId, exportId: identity.exportId });
     }
   }
+  if (skipped) onProgress(`⏭ Skipped ${skipped} already-extracted message(s).`);
   onProgress(`Scan complete: ${total} emails, ${recipients.size} unique recipients.`);
-  if (recipients.size === 0) return { filePath: "", count: 0 };
+  if (recipients.size === 0) return { filePath: "", count: 0, skipped };
 
   const sorted = [...recipients.values()].sort(
     (a, b) => new Date(b.date).getTime() - new Date(a.date).getTime()
@@ -661,6 +737,7 @@ async function runRecipientsExport(
   });
   const filePath = path.join(getOutputDir(), `recipients_${timestamp()}.csv`);
   fs.writeFileSync(filePath, "Name,Email,LastSent\n" + rows.join("\n"), "utf-8");
+  recordExtracted(newEntries);
 
   if (params.saveAttachments) {
     onProgress("Downloading attachments for matched messages…");
@@ -677,21 +754,22 @@ async function runRecipientsExport(
     onProgress(`Attachments saved: ${attCount} file(s) → ${attDir}`);
   }
 
-  return { filePath, count: recipients.size };
+  return { filePath, count: recipients.size, skipped };
 }
 
 // ── FORMAT: emails-csv (one row per message) ──────────────────────────────────
 async function runEmailsCsvExport(
   token: string, folders: MailFolder[], since: string | undefined,
   params: ExportParams, onProgress: (msg: string) => void,
-  until?: string
-): Promise<{ filePath: string; count: number }> {
+  until?: string, extractedIds?: Set<string>
+): Promise<{ filePath: string; count: number; skipped: number }> {
   const selectFields = buildSelectFields(params);
   const esc = (s: string) => `"${String(s).replace(/"/g, '""')}"`;
   const headers = ["exportId","messageId","internetMessageId","outlookWebLink","sentDateTime","from","fromName","toRecipients",
                    "ccRecipients","subject","bodyText","bodyHtml","attachments","folder"];
   const rows: string[] = [];
-  let total = 0;
+  const newEntries: Array<{ messageId: string; exportId: string }> = [];
+  let total = 0; let skipped = 0;
 
   onProgress(`Scanning ${folders.length} folder(s) — full email CSV…`);
   for (const folder of folders) {
@@ -699,6 +777,9 @@ async function runEmailsCsvExport(
     for await (const msg of iterFolderMessages(token, folder.id, since, selectFields, true, until)) {
       total++;
       if (total % 50 === 0) onProgress(`Fetched ${total} messages…`);
+
+      const identity = buildMessageExportIdentity(msg);
+      if (extractedIds?.has(identity.messageId)) { skipped++; continue; }
 
       if (params.flaggedOnly) {
         const flagStatus = ((msg["flag"] as Record<string,string>|undefined)?.["flagStatus"]) ?? "";
@@ -721,7 +802,6 @@ async function runEmailsCsvExport(
         attachmentsStr = JSON.stringify(atts);
       }
 
-      const identity = buildMessageExportIdentity(msg);
       rows.push([
         esc(identity.exportId),
         esc(identity.messageId),
@@ -738,16 +818,19 @@ async function runEmailsCsvExport(
         esc(params.includeAttachmentsMeta ? attachmentsStr : ""),
         esc(folder.displayName),
       ].join(","));
+      newEntries.push({ messageId: identity.messageId, exportId: identity.exportId });
     }
   }
 
+  if (skipped) onProgress(`⏭ Skipped ${skipped} already-extracted message(s).`);
   onProgress(`Done: ${rows.length} messages exported.`);
-  if (rows.length === 0) return { filePath: "", count: 0 };
+  if (rows.length === 0) return { filePath: "", count: 0, skipped };
 
   const filePath = path.join(getOutputDir(), `emails_${timestamp()}.csv`);
   fs.writeFileSync(filePath, headers.join(",") + "\n" + rows.join("\n"), "utf-8");
+  recordExtracted(newEntries);
   await maybeSaveAttachments(token, folders, since, params, onProgress, until);
-  return { filePath, count: rows.length };
+  return { filePath, count: rows.length, skipped };
 }
 
 // shared: save attachments after any export run
@@ -784,11 +867,12 @@ async function maybeSaveAttachments(
 async function runJsonExport(
   token: string, folders: MailFolder[], since: string | undefined,
   params: ExportParams, onProgress: (msg: string) => void,
-  until?: string
-): Promise<{ filePath: string; count: number }> {
+  until?: string, extractedIds?: Set<string>
+): Promise<{ filePath: string; count: number; skipped: number }> {
   const selectFields = buildSelectFields(params);
   const records: object[] = [];
-  let total = 0;
+  const newEntries: Array<{ messageId: string; exportId: string }> = [];
+  let total = 0; let skipped = 0;
 
   onProgress(`Scanning ${folders.length} folder(s) — JSON export…`);
   for (const folder of folders) {
@@ -796,6 +880,9 @@ async function runJsonExport(
     for await (const msg of iterFolderMessages(token, folder.id, since, selectFields, true, until)) {
       total++;
       if (total % 50 === 0) onProgress(`Fetched ${total} messages…`);
+
+      const identity = buildMessageExportIdentity(msg);
+      if (extractedIds?.has(identity.messageId)) { skipped++; continue; }
 
       if (params.flaggedOnly) {
         const flagStatus = ((msg["flag"] as Record<string,string>|undefined)?.["flagStatus"]) ?? "";
@@ -811,7 +898,6 @@ async function runJsonExport(
       const bodyContent = bodyObj?.["content"] ?? "";
       const bodyPlain   = isHtml ? bodyContent.replace(/<[^>]*>/g, "").replace(/&nbsp;/g, " ").replace(/&amp;/g, "&").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/\s+/g, " ").trim() : bodyContent;
 
-      const identity = buildMessageExportIdentity(msg);
       const rec: Record<string, unknown> = {
         exportId:          identity.exportId,
         messageId:         identity.messageId,
@@ -832,16 +918,19 @@ async function runJsonExport(
         rec["attachments"] = await fetchAttachmentsMeta(token, msg["id"] as string);
 
       records.push(rec);
+      newEntries.push({ messageId: identity.messageId, exportId: identity.exportId });
     }
   }
 
+  if (skipped) onProgress(`⏭ Skipped ${skipped} already-extracted message(s).`);
   onProgress(`Done: ${records.length} messages exported.`);
-  if (records.length === 0) return { filePath: "", count: 0 };
+  if (records.length === 0) return { filePath: "", count: 0, skipped };
 
   const filePath = path.join(getOutputDir(), `emails_${timestamp()}.json`);
   fs.writeFileSync(filePath, JSON.stringify(records, null, 2), "utf-8");
+  recordExtracted(newEntries);
   await maybeSaveAttachments(token, folders, since, params, onProgress, until);
-  return { filePath, count: records.length };
+  return { filePath, count: records.length, skipped };
 }
 
 // ── FORMAT: EML (one .eml file per message) ───────────────────────────────────
@@ -899,12 +988,13 @@ function buildEml(msg: Record<string, unknown>, folderName: string): string {
 async function runEmlExport(
   token: string, folders: MailFolder[], since: string | undefined,
   params: ExportParams, onProgress: (msg: string) => void,
-  until?: string
-): Promise<{ filePath: string; count: number }> {
+  until?: string, extractedIds?: Set<string>
+): Promise<{ filePath: string; count: number; skipped: number }> {
   const selectFields = buildSelectFields(params);
   const exportDir = path.join(getOutputDir(), `eml_export_${timestamp()}`);
   fs.mkdirSync(exportDir, { recursive: true });
-  let count = 0; let total = 0;
+  const newEntries: Array<{ messageId: string; exportId: string }> = [];
+  let count = 0; let total = 0; let skipped = 0;
 
   onProgress(`Exporting EML files → ${exportDir}`);
   for (const folder of folders) {
@@ -916,6 +1006,9 @@ async function runEmlExport(
     for await (const msg of iterFolderMessages(token, folder.id, since, selectFields, true, until)) {
       total++;
       if (total % 25 === 0) onProgress(`Written ${count} .eml files…`);
+
+      const identity = buildMessageExportIdentity(msg);
+      if (extractedIds?.has(identity.messageId)) { skipped++; continue; }
 
       if (params.flaggedOnly) {
         const flagStatus = ((msg["flag"] as Record<string,string>|undefined)?.["flagStatus"]) ?? "";
@@ -937,13 +1030,16 @@ async function runEmlExport(
 
       fs.writeFileSync(path.join(senderDir, `${safeDate}_${safeSubject}.eml`),
         buildEml(msg, folder.displayName), "utf-8");
+      newEntries.push({ messageId: identity.messageId, exportId: identity.exportId });
       count++;
     }
   }
 
+  if (skipped) onProgress(`⏭ Skipped ${skipped} already-extracted message(s).`);
   onProgress(`Exported ${count} .eml files (${total} scanned).`);
+  recordExtracted(newEntries);
   await maybeSaveAttachments(token, folders, since, params, onProgress, until);
-  return { filePath: exportDir, count };
+  return { filePath: exportDir, count, skipped };
 }
 
 // ── FORMAT: SQLite (idempotent – keyed on messageId) ─────────────────────────
@@ -973,8 +1069,8 @@ async function runEmlExport(
 async function runSqliteExport(
   token: string, folders: MailFolder[], since: string | undefined,
   params: ExportParams, onProgress: (msg: string) => void,
-  until?: string
-): Promise<{ filePath: string; count: number }> {
+  until?: string, extractedIds?: Set<string>
+): Promise<{ filePath: string; count: number; skipped: number }> {
   const dbPath   = path.join(getOutputDir(), "emails.sqlite");
   const db       = new Database(dbPath);
 
@@ -1033,7 +1129,8 @@ async function runSqliteExport(
   `);
 
   const selectFields = buildSelectFields(params);
-  let total = 0; let upserted = 0;
+  const newEntries: Array<{ messageId: string; exportId: string }> = [];
+  let total = 0; let upserted = 0; let skipped = 0;
   const exportedAt = new Date().toISOString();
 
   // Wrap all inserts in a single transaction for performance
@@ -1050,6 +1147,9 @@ async function runSqliteExport(
     for await (const msg of iterFolderMessages(token, folder.id, since, selectFields, true, until)) {
       total++;
       if (total % 50 === 0) onProgress(`Fetched ${total} messages…`);
+
+      const identity = buildMessageExportIdentity(msg);
+      if (extractedIds?.has(identity.messageId)) { skipped++; continue; }
 
       if (params.flaggedOnly) {
         const flagStatus = ((msg["flag"] as Record<string,string>|undefined)?.["flagStatus"]) ?? "";
@@ -1069,7 +1169,6 @@ async function runSqliteExport(
       if (params.includeAttachmentsMeta && msg["hasAttachments"])
         attachmentsStr = JSON.stringify(await fetchAttachmentsMeta(token, msg["id"] as string));
 
-      const identity = buildMessageExportIdentity(msg);
       batch.push({
         message_id:           identity.messageId,
         export_id:            identity.exportId,
@@ -1087,6 +1186,7 @@ async function runSqliteExport(
         attachments:          attachmentsStr,
         exported_at:          exportedAt,
       });
+      newEntries.push({ messageId: identity.messageId, exportId: identity.exportId });
       upserted++;
     }
 
@@ -1096,11 +1196,13 @@ async function runSqliteExport(
 
   db.close();
 
+  if (skipped) onProgress(`⏭ Skipped ${skipped} already-extracted message(s).`);
   onProgress(`Done: ${upserted} records upserted into ${dbPath} (${total} scanned).`);
-  if (upserted === 0) return { filePath: "", count: 0 };
+  if (upserted === 0) return { filePath: "", count: 0, skipped };
 
+  recordExtracted(newEntries);
   await maybeSaveAttachments(token, folders, since, params, onProgress, until);
-  return { filePath: dbPath, count: upserted };
+  return { filePath: dbPath, count: upserted, skipped };
 }
 
 // ── Electron window ───────────────────────────────────────────────────────────
@@ -1218,7 +1320,12 @@ ipcMain.handle("fetch-calendar-events", async (
 
 ipcMain.handle("start-extraction", async (
   _event,
-  args: { folderIds: string[]; folderTree: MailFolder[]; since?: string; until?: string; exportParams: ExportParams }
+  args: {
+    folderIds: string[]; folderTree: MailFolder[];
+    since?: string; until?: string;
+    forceOverride?: boolean;
+    exportParams: ExportParams;
+  }
 ) => {
   const onProgress = (msg: string) => send("progress", { message: msg });
   try {
@@ -1233,30 +1340,48 @@ ipcMain.handle("start-extraction", async (
     const selected = allFolders.filter((f) => args.folderIds.includes(f.id));
     if (selected.length === 0) { send("error", { message: "No folders selected." }); return; }
 
-    const { exportParams, since, until } = args;
-    let result: { filePath: string; count: number };
+    const { exportParams, since, until, forceOverride } = args;
+
+    // Load extraction history unless the user requested a force-override
+    const extractedIds = forceOverride ? undefined : loadExtractedIds();
+    if (extractedIds) {
+      onProgress(`📋 Extraction history: ${extractedIds.size} message(s) already extracted — duplicates will be skipped.`);
+    } else {
+      onProgress(`⚡ Force override enabled — all messages will be extracted regardless of history.`);
+    }
+
+    let result: { filePath: string; count: number; skipped: number };
 
     switch (exportParams.exportFormat) {
-      case "emails-csv": result = await runEmailsCsvExport(token, selected, since, exportParams, onProgress, until); break;
-      case "json":       result = await runJsonExport(token, selected, since, exportParams, onProgress, until); break;
-      case "eml":        result = await runEmlExport(token, selected, since, exportParams, onProgress, until); break;
-      case "sqlite":     result = await runSqliteExport(token, selected, since, exportParams, onProgress, until); break;
-      default:           result = await runRecipientsExport(token, selected, since, exportParams, onProgress, until);
+      case "emails-csv": result = await runEmailsCsvExport(token, selected, since, exportParams, onProgress, until, extractedIds); break;
+      case "json":       result = await runJsonExport(token, selected, since, exportParams, onProgress, until, extractedIds); break;
+      case "eml":        result = await runEmlExport(token, selected, since, exportParams, onProgress, until, extractedIds); break;
+      case "sqlite":     result = await runSqliteExport(token, selected, since, exportParams, onProgress, until, extractedIds); break;
+      default:           result = await runRecipientsExport(token, selected, since, exportParams, onProgress, until, extractedIds);
     }
 
     if (result.count === 0) {
-      send("done", { outputPath: "", count: 0, format: exportParams.exportFormat });
+      send("done", { outputPath: "", count: 0, skipped: result.skipped, format: exportParams.exportFormat });
     } else {
       // Optionally compress the output file/folder into a ZIP archive
       let finalPath = result.filePath;
       if (exportParams.zipOutput && finalPath) {
         finalPath = await wrapWithZip(finalPath, onProgress);
       }
-      send("done", { outputPath: finalPath, count: result.count, format: exportParams.exportFormat });
+      send("done", { outputPath: finalPath, count: result.count, skipped: result.skipped, format: exportParams.exportFormat });
     }
   } catch (err) {
     send("error", { message: err instanceof Error ? err.message : String(err) });
   }
+});
+
+ipcMain.handle("get-extraction-stats", async (): Promise<{ total: number; lastExtractedAt: string | null }> => {
+  return getExtractionHistoryStats();
+});
+
+ipcMain.handle("clear-extraction-history", async (): Promise<{ ok: boolean }> => {
+  clearExtractionHistory();
+  return { ok: true };
 });
 
 // ── Preview emails (return messages as objects for on-screen display) ─────────
