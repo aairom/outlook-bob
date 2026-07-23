@@ -699,8 +699,12 @@ The **EML → Monday Triage** card is visible at the bottom of the app window.
 
 1. In the **EML → Monday Triage** card, click **Browse…** next to **📁 EML folder** and select the folder containing your `.eml` files.
 2. Optionally click **Browse…** next to **📄 Prompt file** and select your triage prompt (e.g. `prompts/email-triage.md`). If you leave it empty, the app uses [`.bob/skills/eml-to-monday.md`](../.bob/skills/eml-to-monday.md).
-3. Enter the numeric **🏷️ Board ID** — copy it from the **Monday.com Boards** list (shown as `ID: …` per row).
-4. Click **▶ Run Triage**.
+   - Once a file is selected, **✏️** and **👁** buttons appear next to it:
+     - **✏️ Edit** — opens an in-app editor modal with a textarea. Make changes and click **Save** to write back to disk, or **Cancel** to discard.
+     - **👁 Preview** — renders the file as formatted Markdown inside the same modal. Use the **Edit / Preview** tab bar to toggle between modes.
+3. Alternatively, use the **🧠 Skill** dropdown to pick a Bob skill directly. The dropdown is auto-populated from all skills found in `.bob/skills/`. Selecting a skill overrides any prompt file selection.
+4. Enter the numeric **🏷️ Board ID** — copy it from the **Monday.com Boards** list (shown as `ID: …` per row).
+5. Click **▶ Run Triage**.
 
 The app will:
 - Scan the folder recursively for `.eml` files (skipping any `processed/` subfolder)

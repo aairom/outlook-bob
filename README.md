@@ -93,6 +93,8 @@ The app includes a **Monday.com Boards** card at the bottom of the window. Click
 | Kind icon | 🌐 public · 🔒 private · 🔗 share |
 | **Board ID** | `boards.id` — shown in the meta line for use in EML Triage |
 
+Clicking **📋 View My Boards** also populates the board picker used by **Send to Monday**. Each board row includes a **Board ID** that you copy into the EML Triage card. You can also click individual board rows to expand their items — each item shows a clickable link that opens the Monday item in your browser (requires `MONDAY_BASE_URL` to be set to your account URL if it differs from the default `https://monday.com`).
+
 **Token configuration:** the app reads the Monday API token automatically from workspace-root `.bob/mcp.json` (the same token used by the Monday MCP server), or falls back to workspace-root `.env` via `MONDAY_API_TOKEN`. This works with both launcher scripts and manual `npm start`.
 
 > If the token is not found or is invalid, an error message is shown inline in the card.
@@ -391,15 +393,17 @@ The **EML → Monday Triage** card (bottom of the app window) handles everything
 
 1. Click **📁 EML folder** → browse to your `.eml` export directory
 2. Optionally click **📄 Prompt file** → select a `.md` or `.txt` prompt file. If left empty, the app uses [`.bob/skills/eml-to-monday.md`](.bob/skills/eml-to-monday.md)
-3. Enter your **🏷️ Board ID** (copy from the Monday Boards list — shown as `ID: …` per row)
-4. Click **▶ Run Triage** — the app processes every `.eml` file:
+   - Once a file is selected, **✏️** and **👁** icon-buttons appear next to it — click ✏️ to edit the file in an in-app editor, or 👁 to preview it rendered as Markdown, without leaving the app. The Save button writes changes back to disk.
+3. Alternatively, choose a skill from the **🧠 Skill** dropdown — it is automatically populated with all Bob skills found in `.bob/skills/`. Selecting a skill overrides the prompt file selection and uses that skill's content as the triage prompt.
+4. Enter your **🏷️ Board ID** (copy from the Monday Boards list — shown as `ID: …` per row)
+5. Click **▶ Run Triage** — the app processes every `.eml` file:
    - Parses headers (subject, sender, date) and strips HTML body to plain text
    - Infers urgency (🔴/🟡/🟢) and category from subject/body keywords
    - Creates a Monday item (subject → item name)
    - Posts a formatted note (sender · date · urgency · category · summary)
    - Moves each processed file to `<folder>/processed/`
-5. Live progress log and results table show item IDs and any errors
-6. Failed files remain in the source folder — safe to retry
+6. Live progress log and results table show item IDs and any errors
+7. Failed files remain in the source folder — safe to retry
 
 ### Option B — Bob Agent workflow (AI-powered extraction)
 

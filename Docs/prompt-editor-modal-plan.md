@@ -7,13 +7,13 @@ When a file is selected, clicking either button opens an **in-app overlay modal*
 centered panel) that lets the user:
 
 - **Edit mode** — read the file into a `<textarea>`, make changes, Save (writes back to disk) or Cancel.
-- **Preview mode** — render the markdown as styled HTML via **`marked.js` loaded from CDN**; a tab bar lets the user toggle between Edit and Preview within the same modal.
+- **Preview mode** — render the markdown as styled HTML via **`marked.js` bundled locally**; a tab bar lets the user toggle between Edit and Preview within the same modal.
 
 No new Electron window is required. Two new IPC channels (`read-file`, `write-file`) are added to
 `main.ts` and exposed through `preload.ts`.
 
 **Confirmed design decisions:**
-- Markdown renderer: `marked.js` from CDN (full markdown support).
+- Markdown renderer: `marked.js` bundled as `renderer/marked.min.js` (full markdown support).
 - Modal height: **fixed height with internal scrolling** (textarea and preview pane scroll independently).
 
 ---
@@ -42,7 +42,7 @@ can load and persist prompt file content.
 - Existing handler pattern: `ipcMain.handle("show-open-dialog", ...)` at ~line 1440 of `main.ts`.
 - Preload bridge pattern: `showOpenDialog` at ~line 182 of `preload.ts`.
 
-**Status** — `[ ] pending`
+**Status** — `[x] completed`
 
 ---
 
@@ -58,7 +58,7 @@ editor and preview. It must match the existing dark-theme design language (CSS v
 - The overlay has: backdrop, centered card, title bar, Edit/Preview tab buttons, `<textarea id="prompt-editor">`, `<div id="prompt-preview">`, and Save / Cancel footer buttons.
 - CSS classes: `.prompt-modal-overlay`, `.prompt-modal-card`, `.prompt-modal-tabs`, `.prompt-modal-body`, `.prompt-modal-footer`.
 - The modal is fully scrollable if content is long.
-- Markdown preview is rendered using **`marked.js`** loaded from CDN (`<script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js">`).
+- Markdown preview is rendered using **`marked.js`** bundled locally as `renderer/marked.min.js`.
 
 **Todo List**
 1. Add the `#prompt-modal` HTML block at the bottom of `<body>` in `index.html` (before the closing `</body>` tag).
@@ -71,7 +71,7 @@ editor and preview. It must match the existing dark-theme design language (CSS v
 - Existing dark-theme CSS variables: `--surface`, `--border`, `--accent`, `--text-muted` used throughout.
 - Body closing tag is near line 2600+ of `index.html`.
 
-**Status** — `[ ] pending`
+**Status** — `[x] completed`
 
 ---
 
@@ -86,16 +86,16 @@ Add ✏️ and 👁 icon-buttons to the prompt file row that appear only when a 
 - Styling: small, icon-only, matching the existing button style but compact (similar to how small action buttons appear elsewhere).
 
 **Todo List**
-1. In `index.html`, locate the prompt file row (~line 1056-1061) and add `<button id="btn-edit-prompt">✏️</button>` and `<button id="btn-preview-prompt">👁</button>` after `#btn-pick-prompt-file`.
+1. In `index.html`, locate the prompt file row and add `<button id="btn-edit-prompt">✏️</button>` and `<button id="btn-preview-prompt">👁</button>` after `#btn-pick-prompt-file`.
 2. Add CSS for `#btn-edit-prompt, #btn-preview-prompt` — small square buttons, consistent with theme.
-3. In the Browse click handler (~line 2490), after setting `_emlPromptPath`, show both new buttons.
+3. In the Browse click handler, after setting `_emlPromptPath`, show both new buttons.
 
 **Relevant Context**
-- Prompt file row: `index.html` ~line 1056.
-- Browse handler: `index.html` ~line 2490.
+- Prompt file row: `index.html` ~line 1302.
+- Browse handler: `index.html` ~line 2990.
 - Existing button styles can be reused/extended.
 
-**Status** — `[ ] pending`
+**Status** — `[x] completed`
 
 ---
 
@@ -119,14 +119,14 @@ Wire the four interactions: open-for-edit, open-for-preview, tab toggle, save-to
 4. Wire tab button clicks to toggle visible pane and active tab style.
 5. Wire Save button: call `api.writeFile`, handle success/error inline, close on success.
 6. Wire Cancel button and overlay backdrop click to close modal.
-7. Use `marked.parse(content)` (from the CDN `marked.js` script tag added in Sub-Task 2) to render markdown into `#prompt-preview`.
+7. Use `marked.parse(content)` (from the bundled `marked.min.js` script tag) to render markdown into `#prompt-preview`.
 
 **Relevant Context**
-- `api.readFile` / `api.writeFile` will be added in Sub-Task 1.
-- `_emlPromptPath` variable: `index.html` ~line 2471.
-- Renderer JS block starts around line 2430 of `index.html`.
+- `api.readFile` / `api.writeFile` added in Sub-Task 1.
+- `_emlPromptPath` variable: `index.html` ~line 2950.
+- Renderer JS block starts around line 2900 of `index.html`.
 
-**Status** — `[ ] pending`
+**Status** — `[x] completed`
 
 ---
 

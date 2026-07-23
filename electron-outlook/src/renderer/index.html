@@ -2846,6 +2846,14 @@
               copyBtn.textContent = "⎘ Copy ID";
               copyBtn.classList.remove("copied");
             }, 1500);
+            // Auto-paste into the Board ID field in the EML Triage card
+            const boardIdInput = document.getElementById("eml-board-id-input");
+            if (boardIdInput) {
+              boardIdInput.value = b.id;
+              boardIdInput.style.transition = "border-color 0.15s";
+              boardIdInput.style.borderColor = "#a6e3a1";
+              setTimeout(() => { boardIdInput.style.borderColor = ""; }, 1500);
+            }
           });
         });
         meta.appendChild(copyBtn);

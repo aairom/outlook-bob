@@ -167,6 +167,7 @@ flowchart TD
 | `add-monday-item-update` | renderer → main | `itemId, body` | Post a text update note on a Monday item |
 | `show-open-dialog` | renderer → main | `title, properties, filters?` | Open native OS file / folder picker dialog |
 | `process-eml-folder` | renderer → main | `folderPath, promptContent, boardId` | Process `.eml` folder: parse emails, create Monday items, move files to `processed/` |
+| `list-bob-skills` | renderer → main | — | List all Bob skills in `.bob/skills/` — returns `{ name, path }[]`; used to populate the 🧠 Skill dropdown in EML Triage |
 | `connect-box` | renderer → main | — | Start Box OAuth 2.0 browser login flow |
 | `box-logout` | renderer → main | — | Clear Box token cache |
 | `get-box-status` | renderer → main | — | Check if a valid Box token exists |
@@ -181,8 +182,8 @@ flowchart TD
 | `progress` | main → renderer | `{ message }` | Live status updates during extraction |
 | `done` | main → renderer | `{ outputPath, count, format }` | Extraction complete |
 | `error` | main → renderer | `{ message }` | Error notification |
-| `read-file` | renderer → main | `path` | Read a local file from disk (used by prompt editor) |
-| `write-file` | renderer → main | `path, content` | Write a local file to disk (used by prompt editor save) |
+| `read-file` | renderer → main | `path` | Read a local file from disk (used by prompt editor modal) |
+| `write-file` | renderer → main | `path, content` | Write a local file to disk (used by prompt editor modal save) |
 | `monday-error` | main → renderer | `{ message }` | Monday API error notification |
 | `eml-triage-progress` | main → renderer | `{ message }` | Live progress updates during EML folder triage |
 
@@ -454,7 +455,8 @@ It processes `.eml` files entirely inside the Electron main process — no Bob o
 
 **Flow:**
 1. User picks an EML folder via native OS dialog (`show-open-dialog`)
-2. User picks a prompt file (`.md` / `.txt`) via native OS dialog
+2. User picks a prompt file (`.md` / `.txt`) via native OS dialog — or selects a Bob skill from the **🧠 Skill** dropdown (populated via `list-bob-skills` IPC)
+   - If a file is selected, ✏️ / 👁 buttons appear: clicking either opens the **Prompt Editor Modal** (see below)
 3. User enters the Monday board ID (visible in the Boards list as `ID: …`)
 4. User clicks **▶ Run Triage** — for each `.eml` file:
    - `parseEmlHeaders()` extracts Subject, From, Date
@@ -521,6 +523,35 @@ prompts/                  ← gitignored — stays local
 
 ---
 
+## Prompt Editor Modal
+
+An in-app overlay modal (dark backdrop + centred card) for editing and previewing prompt/skill files without leaving the app.
+
+| Detail | Value |
+|---|---|
+| Trigger | ✏️ (Edit) or 👁 (Preview) button — visible only when a prompt file is selected |
+| IPC reads | `read-file` — loads file content into the textarea |
+| IPC writes | `write-file` — saves textarea content back to disk |
+| Markdown renderer | `marked.js` (bundled as `renderer/marked.min.js`) |
+| Tabs | **✏️ Edit** (textarea) · **👁 Preview** (rendered HTML) |
+| Save | Calls `write-file`; shows inline success/error; closes on success |
+| Cancel / backdrop click | Closes without saving |
+| Height | Fixed `80vh`; body pane scrolls independently |
+
+## 🧠 Skill Selector
+
+The EML Triage card includes a **🧠 Skill** dropdown populated at startup by `list-bob-skills`.
+
+| Detail | Value |
+|---|---|
+| IPC channel | `list-bob-skills` |
+| Source | All `.md` files + `SKILL.md` inside sub-folders under `.bob/skills/` |
+| Default option | `— use prompt file above —` (no override) |
+| Override behaviour | Selecting a skill sets `_emlPromptPath` to the skill file path, overriding any manually browsed prompt file |
+| Fallback | If `.bob/skills/` is inaccessible the dropdown remains empty and triage uses the manually selected file |
+
+---
+
 ## Project Structure
 
 ```
@@ -549,7 +580,8 @@ Outlook-Bob/
     │   ├── main.ts                        # Main process — auth, Graph API, export logic, ZIP, Monday GraphQL client, preview handler
     │   ├── preload.ts                     # Context bridge — IPC channels + types (MondayBoard, PreviewMessage)
     │   └── renderer/
-    │       └── index.html                 # Full UI — folder tree, 6 format tiles, preview card, Monday Boards card, resetUI()
+    │       ├── index.html                 # Full UI — folder tree, export formats, preview card, Monday Boards card, EML Triage card, Prompt Editor Modal, resetUI()
+    │       └── marked.min.js              # Bundled markdown renderer used by the Prompt Editor Modal
     ├── package.json
     ├── tsconfig.json
     ├── Quickstart.md                      # App-specific quickstart
