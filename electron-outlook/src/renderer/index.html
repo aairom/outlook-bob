@@ -2808,6 +2808,13 @@
       selectedEmailId    = null;
       checkedEmailIds    = new Set();
 
+      // Calendar card → hidden / cleared
+      calendarCard.style.display  = "none";
+      calListWrap.innerHTML       = "";
+      _calEvents                  = [];
+      btnLoadCalendar.disabled    = false;
+      btnLoadCalendar.textContent = "📅 Load Calendar";
+
       updateFieldVisibility();
     }
 
