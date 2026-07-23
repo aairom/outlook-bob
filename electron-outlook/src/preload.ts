@@ -109,6 +109,13 @@ contextBridge.exposeInMainWorld("electronAPI", {
   listMondayBoards: (): Promise<{ boards: MondayBoard[] }> =>
     ipcRenderer.invoke("list-monday-boards"),
 
+  hasMondayToken: (): Promise<{ hasToken: boolean }> =>
+    ipcRenderer.invoke("has-monday-token"),
+
+  saveMondayToken: (token: string): Promise<{ ok: boolean; path?: string; error?: string }> =>
+    ipcRenderer.invoke("save-monday-token", { token }),
+
+
   getMondayBoardItems: (boardId: string): Promise<{
     columns: Array<{ id: string; title: string; type: string }>;
     items: MondayItem[];

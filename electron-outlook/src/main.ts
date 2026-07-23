@@ -1621,6 +1621,63 @@ ipcMain.handle("list-monday-boards", async () => {
   }
 });
 
+ipcMain.handle("has-monday-token", () => ({ hasToken: getMondayToken() !== null }));
+
+// ── Save Monday API token to .env ─────────────────────────────────────────────
+// Writes (or updates) the MONDAY_API_TOKEN line in the first .env file that
+// exists on disk, then re-invokes _resolveSecrets() so the token is live in
+// the current process without a restart.
+ipcMain.handle("save-monday-token", async (_event, args: { token: string }) => {
+  const token = (args.token ?? "").trim();
+  if (!token) return { ok: false, error: "Token is empty." };
+
+  // Resolve the same candidate list used by _resolveSecrets()
+  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? app.getPath("home");
+  const envCandidates = [
+    ...(_bobRoot ? [path.join(_bobRoot, ".env")] : []),
+    path.join(homeDir, ".config", "outlook-bob", ".env"),
+    path.join(__dirname, "..", "..", ".env"),
+    path.join(__dirname, "..", "..", "..", ".env"),
+    path.join(process.cwd(), ".env"),
+    path.join(process.cwd(), "..", ".env"),
+  ];
+
+  // Pick the first candidate that already exists, or fall back to the first one
+  let targetPath = envCandidates.find(c => { try { return fs.existsSync(c); } catch { return false; } });
+  if (!targetPath) {
+    // No .env found yet — create one next to the project root
+    targetPath = _bobRoot
+      ? path.join(_bobRoot, ".env")
+      : path.join(process.cwd(), ".env");
+  }
+
+  try {
+    let content = "";
+    if (fs.existsSync(targetPath)) {
+      content = fs.readFileSync(targetPath, "utf8");
+    }
+    const line = `MONDAY_API_TOKEN=${token}`;
+    if (/^MONDAY_API_TOKEN=/m.test(content)) {
+      // Replace existing entry
+      content = content.replace(/^MONDAY_API_TOKEN=.*/m, line);
+    } else {
+      // Append
+      content = content.endsWith("\n") || content === ""
+        ? content + line + "\n"
+        : content + "\n" + line + "\n";
+    }
+    // Ensure parent directory exists (e.g. ~/.config/outlook-bob/)
+    fs.mkdirSync(path.dirname(targetPath), { recursive: true });
+    fs.writeFileSync(targetPath, content, "utf8");
+    // Activate immediately for the running process
+    process.env.MONDAY_API_TOKEN = token;
+    _resolveSecrets();
+    return { ok: true, path: targetPath };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+});
+
 ipcMain.handle("get-monday-board-items", async (_event, args: { boardId: string }) => {
   try {
     // Fetch up to 200 items with their column values; filter out Done on the renderer side

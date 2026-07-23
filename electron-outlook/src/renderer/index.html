@@ -608,6 +608,25 @@
     .monday-board-copy-id.copied { color: #a6e3a1; border-color: #a6e3a1; }
     #monday-status { font-size: 12px; color: #89b4fa; margin-top: 8px; display: none; }
     #monday-error  { font-size: 12px; color: #f38ba8; margin-top: 8px; display: none; }
+    /* ── Monday API key entry ── */
+    #monday-token-form {
+      margin-top: 12px; padding: 10px 12px; border-radius: 8px;
+      border: 1px solid #45475a; background: #1e1e2e;
+    }
+    #monday-token-form label {
+      display: block; font-size: 11px; color: #6c7086; margin-bottom: 6px;
+    }
+    #monday-token-form .token-row { display: flex; gap: 6px; }
+    #monday-token-input {
+      flex: 1; background: #181825; border: 1px solid #45475a; border-radius: 6px;
+      color: #cdd6f4; font-size: 12px; padding: 5px 8px; outline: none;
+      font-family: monospace;
+    }
+    #monday-token-input:focus { border-color: #f9e2af; }
+    #btn-save-monday-token { background: #f9e2af; color: #1e1e2e; font-size: 12px; white-space: nowrap; }
+    #monday-token-result { font-size: 11px; margin-top: 6px; display: none; }
+    #monday-token-result.ok  { color: #a6e3a1; }
+    #monday-token-result.err { color: #f38ba8; }
 
     /* ── Monday Items panel ── */
     #monday-items-card { display: none; }
@@ -1329,6 +1348,15 @@
     <div id="monday-status">Loading boards…</div>
     <div id="monday-error"></div>
     <div id="monday-boards-list"></div>
+    <!-- API key entry — shown only when no token is configured -->
+    <div id="monday-token-form">
+      <label for="monday-token-input">🔑 Monday API Token — paste your personal token to save it to <code>.env</code></label>
+      <div class="token-row">
+        <input type="password" id="monday-token-input" placeholder="eyJhbGciOiJIUzI1NiJ9…" autocomplete="off" />
+        <button id="btn-save-monday-token">Save Token</button>
+      </div>
+      <div id="monday-token-result"></div>
+    </div>
   </div>
 
   <!-- ── Monday Items card (shown when a board is selected) ── -->
@@ -2799,6 +2827,10 @@
     const mondayNewItemName  = document.getElementById("monday-new-item-name");
     const btnAddMondayItem   = document.getElementById("btn-add-monday-item");
     const mondayAddResult    = document.getElementById("monday-add-result");
+    const mondayTokenForm    = document.getElementById("monday-token-form");
+    const mondayTokenInput   = document.getElementById("monday-token-input");
+    const btnSaveMondayToken = document.getElementById("btn-save-monday-token");
+    const mondayTokenResult  = document.getElementById("monday-token-result");
 
     const BOARD_KIND_ICONS = { public: "🌐", private: "🔒", share: "🔗" };
     // Populated at boot from process.env.MONDAY_BASE_URL via get-status
@@ -3104,6 +3136,37 @@
       if (e.key === "Enter") btnAddMondayItem.click();
     });
 
+    // ── Save Monday API token ────────────────────────────────────────────────
+    btnSaveMondayToken.addEventListener("click", async () => {
+      const token = mondayTokenInput.value.trim();
+      if (!token) {
+        mondayTokenResult.className = "err";
+        mondayTokenResult.textContent = "⚠️ Please paste a token first.";
+        mondayTokenResult.style.display = "block";
+        return;
+      }
+      btnSaveMondayToken.disabled = true;
+      mondayTokenResult.style.display = "none";
+      const res = await api.saveMondayToken(token);
+      btnSaveMondayToken.disabled = false;
+      if (res.ok) {
+        mondayTokenResult.className = "ok";
+        mondayTokenResult.textContent = `✅ Token saved to ${res.path}. Click "View My Boards" to load your boards.`;
+        mondayTokenResult.style.display = "block";
+        mondayTokenInput.value = "";
+        // Hide the form — token is now stored
+        mondayTokenForm.style.display = "none";
+      } else {
+        mondayTokenResult.className = "err";
+        mondayTokenResult.textContent = "❌ " + (res.error || "Failed to save token.");
+        mondayTokenResult.style.display = "block";
+      }
+    });
+
+    mondayTokenInput.addEventListener("keydown", e => {
+      if (e.key === "Enter") btnSaveMondayToken.click();
+    });
+
     // ── EML Triage card ──────────────────────────────────────────────────────
     const btnPickEmlFolder  = document.getElementById("btn-pick-eml-folder");
     const btnPickPromptFile = document.getElementById("btn-pick-prompt-file");
@@ -3369,6 +3432,10 @@
       const { authenticated, mondayBaseUrl } = await api.getStatus();
       if (mondayBaseUrl) MONDAY_BASE = mondayBaseUrl;
       setAuthenticated(authenticated);
+
+      // Show the token entry form only when no token is already configured.
+      const { hasToken } = await api.hasMondayToken();
+      if (hasToken) mondayTokenForm.style.display = "none";
     })();
   </script>
 </body>
