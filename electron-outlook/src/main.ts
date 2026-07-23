@@ -1850,7 +1850,10 @@ ipcMain.handle("process-eml-folder", async (
   if (promptContent.startsWith("PATH:")) {
     const promptPath = promptContent.slice(5);
     try { promptContent = fs.readFileSync(promptPath, "utf-8"); }
-    catch { promptContent = `(prompt file not found: ${promptPath})`; }
+    catch {
+      send("eml-triage-progress", { message: `⚠️ Skill/prompt file not found: ${promptPath} — falling back to eml-to-monday.md` });
+      promptContent = "";
+    }
   }
   if (!promptContent.trim()) {
     const fallbackPromptPath = path.join(app.getAppPath(), "..", ".bob", "skills", "eml-to-monday.md");
