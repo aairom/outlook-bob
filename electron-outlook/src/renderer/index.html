@@ -96,7 +96,21 @@
       align-self: stretch;
     }
 
-    /* ── Inline date row ── */
+    /* ── Date range rows ── */
+    /* Outer wrapper: date-columns on the left, ZIP on the right */
+    .date-range-block {
+      display: flex;
+      flex-direction: row;
+      align-items: flex-start;
+      gap: 24px;
+      flex-wrap: wrap;
+    }
+    /* Left column: stacked since + until rows */
+    .date-columns {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
     .date-row {
       display: flex;
       align-items: center;
@@ -110,10 +124,28 @@
       flex-shrink: 0;
       font-size: 12px;
       color: var(--text-muted);
+      min-width: 290px;
     }
     .date-row input[type="date"] {
-      max-width: 220px;
+      max-width: 160px;
       width: auto;
+    }
+    /* Right column: ZIP checkbox, vertically centred with the date block */
+    .date-zip-col {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      align-self: center;
+    }
+    .date-row input[type="date"].date-error {
+      border-color: #f38ba8 !important;
+      outline: 1px solid #f38ba8;
+    }
+    #date-range-error {
+      font-size: 11px;
+      color: #f38ba8;
+      display: none;
+      padding-left: 4px;
     }
     .date-row-sep {
       display: inline-block;
@@ -507,6 +539,19 @@
     #result-msg { margin-top: 10px; font-size: 13px; display: none; }
     #result-msg.ok  { color: #a6e3a1; }
     #result-msg.err { color: #f38ba8; }
+    #output-path-msg {
+      display: none;
+      margin-top: 6px;
+      font-size: 11px;
+      color: var(--text-muted);
+      word-break: break-all;
+    }
+    #output-path-msg span {
+      color: #89b4fa;
+      cursor: pointer;
+      text-decoration: underline dotted;
+    }
+    #output-path-msg span:hover { color: #cdd6f4; }
 
     /* ── Destination toggle ── */
     .dest-toggle-row {
@@ -1147,14 +1192,27 @@
 
   <!-- ── Date + run card ── -->
   <div class="card">
-    <div class="date-row">
-      <label class="field-label" for="since-date">Scan emails / calendar events since (optional)</label>
-      <input type="date" id="since-date" />
-      <span class="date-row-sep"></span>
-      <input type="checkbox" id="chk-zip-output" style="-webkit-app-region:no-drag; width:14px; height:14px; accent-color:var(--accent); cursor:pointer;" />
-      <label for="chk-zip-output" style="-webkit-app-region:no-drag; cursor:pointer; white-space:nowrap; font-size:12px; color:var(--text-muted); margin-bottom:0;">
-        📦 Compress output as ZIP file
-      </label>
+    <div class="date-range-block">
+      <!-- Left: stacked date inputs -->
+      <div class="date-columns">
+        <div class="date-row">
+          <label class="field-label" for="since-date">Scan emails / calendar events since (optional)</label>
+          <input type="date" id="since-date" />
+        </div>
+        <div class="date-row">
+          <label class="field-label" for="until-date">Scan emails / calendar events to (optional)</label>
+          <input type="date" id="until-date" />
+        </div>
+        <span id="date-range-error">⚠ "To" date must be after "Since" date.</span>
+      </div>
+      <!-- Right: ZIP checkbox, inline with the date block -->
+      <div class="date-zip-col">
+        <span class="date-row-sep" style="height:36px;"></span>
+        <input type="checkbox" id="chk-zip-output" style="-webkit-app-region:no-drag; width:14px; height:14px; accent-color:var(--accent); cursor:pointer;" />
+        <label for="chk-zip-output" style="-webkit-app-region:no-drag; cursor:pointer; white-space:nowrap; font-size:12px; color:var(--text-muted); margin-bottom:0;">
+          📦 Compress output as ZIP file
+        </label>
+      </div>
     </div>
 
     <!-- Preview limit (shown only in Preview mode) -->
@@ -1247,6 +1305,7 @@
     <p class="section-title">Progress</p>
     <div id="log"></div>
     <div id="result-msg"></div>
+    <div id="output-path-msg">📂 Output: <span id="output-path-link"></span></div>
   </div>
 
   <!-- ── Monday Boards card ── -->
@@ -1313,6 +1372,7 @@
       <select id="eml-skill-select" style="-webkit-app-region:no-drag; flex:1; min-width:140px; padding:7px 11px; background:var(--input-bg); border:1px solid var(--border); border-radius:8px; color:var(--text); font-size:12px; outline:none;">
         <option value="">— use prompt file above —</option>
       </select>
+      <button id="btn-refresh-skills" title="Refresh skills list" style="-webkit-app-region:no-drag; padding:4px 8px; font-size:14px; line-height:1; flex-shrink:0;">🔄</button>
     </div>
 
     <!-- Board ID -->
@@ -1395,6 +1455,8 @@
     const btnOpenOutput   = document.getElementById("btn-open-output");
     const btnRunAgain     = document.getElementById("btn-run-again");
     const sinceDate       = document.getElementById("since-date");
+    const untilDate       = document.getElementById("until-date");
+    const dateRangeError  = document.getElementById("date-range-error");
     const folderCard      = document.getElementById("folder-card");
     const folderLoading   = document.getElementById("folder-loading");
     const folderEmpty     = document.getElementById("folder-empty");
@@ -1403,6 +1465,8 @@
     const logCard         = document.getElementById("log-card");
     const logEl           = document.getElementById("log");
     const resultMsg       = document.getElementById("result-msg");
+    const outputPathMsg   = document.getElementById("output-path-msg");
+    const outputPathLink  = document.getElementById("output-path-link");
     const fieldSection    = document.getElementById("field-toggles-section");
     const emlHint         = document.getElementById("eml-hint");
     const chkFilterDomain      = document.getElementById("chk-filter-domain");
@@ -1569,6 +1633,8 @@
       logEl.innerHTML = "";
       resultMsg.style.display = "none";
       resultMsg.className = "";
+      outputPathMsg.style.display = "none";
+      outputPathLink.textContent = "";
       btnOpenOutput.style.display = "none";
       btnRunAgain.style.display = "none";
     }
@@ -1583,6 +1649,21 @@
     function getCheckedFolderIds() {
       return Array.from(document.querySelectorAll(".folder-check:checked")).map(cb => cb.dataset.id);
     }
+
+    // Validate that "until" is strictly after "since" when both are set.
+    // Returns true when the range is valid (or incomplete), false when invalid.
+    function validateDateRange() {
+      const sv = sinceDate.value;
+      const uv = untilDate.value;
+      const invalid = !!(sv && uv && uv <= sv);
+      sinceDate.classList.toggle("date-error", invalid);
+      untilDate.classList.toggle("date-error", invalid);
+      dateRangeError.style.display = invalid ? "block" : "none";
+      return !invalid;
+    }
+
+    sinceDate.addEventListener("change", validateDateRange);
+    untilDate.addEventListener("change", validateDateRange);
 
     function updateSelectedCount() {
       const n = getCheckedFolderIds().length;
@@ -1824,11 +1905,13 @@
 
     // ── Load Calendar ─────────────────────────────────────────────────────────
     btnLoadCalendar.addEventListener("click", async () => {
+      if (!validateDateRange()) return;
       btnLoadCalendar.disabled = true;
       btnLoadCalendar.textContent = "Loading…";
 
       const { events, error } = await api.fetchCalendarEvents({
         since: sinceDate.value || undefined,
+        until: untilDate.value || undefined,
         limit: 200,
       });
 
@@ -1899,6 +1982,12 @@
       const folderIds = getCheckedFolderIds();
       if (!folderIds.length) return;
 
+      if (!validateDateRange()) {
+        logCard.style.display = "block";
+        appendLog("⚠️  Please fix the date range — \"To\" date must be after \"Since\" date.", "err");
+        return;
+      }
+
       const exportParams = getExportParams();
 
       // Validate: some formats need at least one field selected
@@ -1953,6 +2042,9 @@
         resultMsg.style.display = "block";
         resultMsg.className = "ok";
         resultMsg.textContent = "✅ Done — " + base + (zipped ? " (ZIP)" : "");
+        outputPathLink.textContent = outputPath;
+        outputPathLink.onclick = () => api.openFile(outputPath);
+        outputPathMsg.style.display = "block";
         appendLog("Saved → " + outputPath, "ok");
 
         // ── Box Drive copy (if destination is "boxdrive" or "both-bd") ───────
@@ -2010,6 +2102,7 @@
         folderIds,
         folderTree: cachedFolderTree,
         since: sinceDate.value || undefined,
+        until: untilDate.value || undefined,
         exportParams,
       });
     });
@@ -2510,6 +2603,7 @@
     btnPreview.addEventListener("click", async () => {
       const folderIds = getCheckedFolderIds();
       if (!folderIds.length) return;
+      if (!validateDateRange()) return;
 
       btnPreview.disabled   = true;
       btnConnect.disabled   = true;
@@ -2534,6 +2628,7 @@
         folderIds,
         folderTree: cachedFolderTree,
         since: sinceDate.value || undefined,
+        until: untilDate.value || undefined,
         limit,
         flaggedOnly: document.getElementById("chk-flagged-only").checked,
       });
@@ -2601,6 +2696,10 @@
 
       // Date filter → cleared
       sinceDate.value = "";
+      untilDate.value = "";
+      sinceDate.classList.remove("date-error");
+      untilDate.classList.remove("date-error");
+      dateRangeError.style.display = "none";
 
       // Folder tree → hidden, deselected
       folderCard.style.display = "none";
@@ -2962,11 +3061,12 @@
     const emlFolderDisplay  = document.getElementById("eml-folder-display");
     const emlPromptDisplay  = document.getElementById("eml-prompt-display");
     const emlBoardIdInput   = document.getElementById("eml-board-id-input");
-    const emlSkillSelect    = document.getElementById("eml-skill-select");
-    const btnRunTriage      = document.getElementById("btn-run-triage");
-    const emlTriageLog      = document.getElementById("eml-triage-log");
-    const emlTriageSummary  = document.getElementById("eml-triage-summary");
-    const emlTriageTbody    = document.getElementById("eml-triage-tbody");
+    const emlSkillSelect      = document.getElementById("eml-skill-select");
+    const btnRefreshSkills    = document.getElementById("btn-refresh-skills");
+    const btnRunTriage        = document.getElementById("btn-run-triage");
+    const emlTriageLog        = document.getElementById("eml-triage-log");
+    const emlTriageSummary    = document.getElementById("eml-triage-summary");
+    const emlTriageTbody      = document.getElementById("eml-triage-tbody");
 
     let _emlFolderPath  = "";
     let _emlPromptPath  = "";
@@ -2988,8 +3088,11 @@
       } catch { /* clipboard access denied — do nothing */ }
     });
 
-    // Load available Bob skills into the selector
-    (async () => {
+    // Load (or reload) available Bob skills into the selector
+    async function loadBobSkills() {
+      const previousValue = emlSkillSelect.value;
+      // Remove all options except the first placeholder
+      while (emlSkillSelect.options.length > 1) emlSkillSelect.remove(1);
       try {
         const { skills } = await api.listBobSkills();
         for (const s of skills) {
@@ -2998,8 +3101,20 @@
           opt.textContent = s.name;
           emlSkillSelect.appendChild(opt);
         }
+        // Restore previous selection if it still exists
+        if (previousValue) emlSkillSelect.value = previousValue;
       } catch { /* skills dir not accessible */ }
-    })();
+    }
+
+    loadBobSkills();
+
+    btnRefreshSkills.addEventListener("click", async () => {
+      btnRefreshSkills.disabled = true;
+      btnRefreshSkills.textContent = "⏳";
+      await loadBobSkills();
+      btnRefreshSkills.disabled = false;
+      btnRefreshSkills.textContent = "🔄";
+    });
 
     // When a skill is chosen it overrides the prompt file selection
     emlSkillSelect.addEventListener("change", () => {

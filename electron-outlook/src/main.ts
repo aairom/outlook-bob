@@ -427,13 +427,19 @@ async function listCalendars(token: string): Promise<CalendarEntry[]> {
 // ── Iterate messages in a folder ──────────────────────────────────────────────
 async function* iterFolderMessages(
   token: string, folderId: string, since: string | undefined, selectFields: string,
-  orderBy = true
+  orderBy = true, until?: string
 ): AsyncGenerator<Record<string, unknown>> {
+  // Build the OData $filter for the date range
+  const filters: string[] = [];
+  if (since) filters.push(`sentDateTime ge ${since}T00:00:00Z`);
+  if (until) filters.push(`sentDateTime le ${until}T23:59:59Z`);
+  const filterParam = filters.length ? `&$filter=${encodeURIComponent(filters.join(" and "))}` : "";
+
   let url: string | null =
     `${GRAPH_BASE}/me/mailFolders/${folderId}/messages` +
     `?$select=${encodeURIComponent(selectFields)}&$top=50` +
     (orderBy ? `&$orderby=sentDateTime%20desc` : "") +
-    (since ? `&$filter=sentDateTime%20ge%20${encodeURIComponent(since + "T00:00:00Z")}` : "");
+    filterParam;
   while (url) {
     const data = (await graphGet(token, url)) as Record<string, unknown>;
     for (const msg of (data["value"] as Record<string, unknown>[]) ?? []) yield msg;
@@ -563,7 +569,7 @@ function buildMessageExportIdentity(msg: Record<string, unknown>): MessageExport
 
 // ── Output directory ──────────────────────────────────────────────────────────
 function getOutputDir(): string {
-  const dir = path.resolve(app.getAppPath(), "..", "..", "output");
+  const dir = path.resolve(app.getAppPath(), "..", "output");
   fs.mkdirSync(dir, { recursive: true });
   return dir;
 }
@@ -609,7 +615,8 @@ function wrapWithZip(sourcePath: string, onProgress: (msg: string) => void): Pro
 // ── FORMAT: recipients-csv (original behaviour) ───────────────────────────────
 async function runRecipientsExport(
   token: string, folders: MailFolder[], since: string | undefined,
-  params: ExportParams, onProgress: (msg: string) => void
+  params: ExportParams, onProgress: (msg: string) => void,
+  until?: string
 ): Promise<{ filePath: string; count: number }> {
   const selectFields = buildSelectFields(params);
   const recipients = new Map<string, Recipient>();
@@ -618,7 +625,7 @@ async function runRecipientsExport(
   onProgress(`Scanning ${folders.length} folder(s) for recipients…`);
   for (const folder of folders) {
     onProgress(`📁 ${folder.displayName}…`);
-    for await (const msg of iterFolderMessages(token, folder.id, since, selectFields)) {
+    for await (const msg of iterFolderMessages(token, folder.id, since, selectFields, true, until)) {
       total++;
       if (params.flaggedOnly) {
         const flagStatus = ((msg["flag"] as Record<string,string>|undefined)?.["flagStatus"]) ?? "";
@@ -662,7 +669,7 @@ async function runRecipientsExport(
     for (const folder of folders) {
       const safeFolder = folder.displayName.replace(/[/\\:*?"<>|]/g, "_");
       const folderDir  = path.join(attDir, safeFolder);
-      for await (const msg of iterFolderMessages(token, folder.id, since, buildSelectFields(params))) {
+      for await (const msg of iterFolderMessages(token, folder.id, since, buildSelectFields(params), true, until)) {
         if (!msg["hasAttachments"]) continue;
         attCount += await saveAttachmentsForMessage(token, msg["id"] as string, folderDir, params.attachmentTypes);
       }
@@ -676,7 +683,8 @@ async function runRecipientsExport(
 // ── FORMAT: emails-csv (one row per message) ──────────────────────────────────
 async function runEmailsCsvExport(
   token: string, folders: MailFolder[], since: string | undefined,
-  params: ExportParams, onProgress: (msg: string) => void
+  params: ExportParams, onProgress: (msg: string) => void,
+  until?: string
 ): Promise<{ filePath: string; count: number }> {
   const selectFields = buildSelectFields(params);
   const esc = (s: string) => `"${String(s).replace(/"/g, '""')}"`;
@@ -688,7 +696,7 @@ async function runEmailsCsvExport(
   onProgress(`Scanning ${folders.length} folder(s) — full email CSV…`);
   for (const folder of folders) {
     onProgress(`📁 ${folder.displayName}…`);
-    for await (const msg of iterFolderMessages(token, folder.id, since, selectFields)) {
+    for await (const msg of iterFolderMessages(token, folder.id, since, selectFields, true, until)) {
       total++;
       if (total % 50 === 0) onProgress(`Fetched ${total} messages…`);
 
@@ -738,14 +746,15 @@ async function runEmailsCsvExport(
 
   const filePath = path.join(getOutputDir(), `emails_${timestamp()}.csv`);
   fs.writeFileSync(filePath, headers.join(",") + "\n" + rows.join("\n"), "utf-8");
-  await maybeSaveAttachments(token, folders, since, params, onProgress);
+  await maybeSaveAttachments(token, folders, since, params, onProgress, until);
   return { filePath, count: rows.length };
 }
 
 // shared: save attachments after any export run
 async function maybeSaveAttachments(
   token: string, folders: MailFolder[], since: string | undefined,
-  params: ExportParams, onProgress: (msg: string) => void
+  params: ExportParams, onProgress: (msg: string) => void,
+  until?: string
 ): Promise<void> {
   if (!params.saveAttachments) return;
   onProgress("Downloading attachments for matched messages…");
@@ -756,7 +765,7 @@ async function maybeSaveAttachments(
     const folderDir  = path.join(attDir, safeFolder);
     const attSelect  = ["id", "hasAttachments", "from", "sentDateTime",
                         ...(params.flaggedOnly ? ["flag"] : [])].join(",");
-    for await (const msg of iterFolderMessages(token, folder.id, since, attSelect)) {
+    for await (const msg of iterFolderMessages(token, folder.id, since, attSelect, true, until)) {
       if (params.flaggedOnly) {
         const flagStatus = ((msg["flag"] as Record<string,string>|undefined)?.["flagStatus"]) ?? "";
         if (flagStatus !== "flagged") continue;
@@ -774,7 +783,8 @@ async function maybeSaveAttachments(
 // ── FORMAT: JSON (array of message objects) ───────────────────────────────────
 async function runJsonExport(
   token: string, folders: MailFolder[], since: string | undefined,
-  params: ExportParams, onProgress: (msg: string) => void
+  params: ExportParams, onProgress: (msg: string) => void,
+  until?: string
 ): Promise<{ filePath: string; count: number }> {
   const selectFields = buildSelectFields(params);
   const records: object[] = [];
@@ -783,7 +793,7 @@ async function runJsonExport(
   onProgress(`Scanning ${folders.length} folder(s) — JSON export…`);
   for (const folder of folders) {
     onProgress(`📁 ${folder.displayName}…`);
-    for await (const msg of iterFolderMessages(token, folder.id, since, selectFields)) {
+    for await (const msg of iterFolderMessages(token, folder.id, since, selectFields, true, until)) {
       total++;
       if (total % 50 === 0) onProgress(`Fetched ${total} messages…`);
 
@@ -830,7 +840,7 @@ async function runJsonExport(
 
   const filePath = path.join(getOutputDir(), `emails_${timestamp()}.json`);
   fs.writeFileSync(filePath, JSON.stringify(records, null, 2), "utf-8");
-  await maybeSaveAttachments(token, folders, since, params, onProgress);
+  await maybeSaveAttachments(token, folders, since, params, onProgress, until);
   return { filePath, count: records.length };
 }
 
@@ -888,7 +898,8 @@ function buildEml(msg: Record<string, unknown>, folderName: string): string {
 
 async function runEmlExport(
   token: string, folders: MailFolder[], since: string | undefined,
-  params: ExportParams, onProgress: (msg: string) => void
+  params: ExportParams, onProgress: (msg: string) => void,
+  until?: string
 ): Promise<{ filePath: string; count: number }> {
   const selectFields = buildSelectFields(params);
   const exportDir = path.join(getOutputDir(), `eml_export_${timestamp()}`);
@@ -902,7 +913,7 @@ async function runEmlExport(
     fs.mkdirSync(folderDir, { recursive: true });
     onProgress(`📁 ${folder.displayName}…`);
 
-    for await (const msg of iterFolderMessages(token, folder.id, since, selectFields)) {
+    for await (const msg of iterFolderMessages(token, folder.id, since, selectFields, true, until)) {
       total++;
       if (total % 25 === 0) onProgress(`Written ${count} .eml files…`);
 
@@ -931,7 +942,7 @@ async function runEmlExport(
   }
 
   onProgress(`Exported ${count} .eml files (${total} scanned).`);
-  await maybeSaveAttachments(token, folders, since, params, onProgress);
+  await maybeSaveAttachments(token, folders, since, params, onProgress, until);
   return { filePath: exportDir, count };
 }
 
@@ -961,7 +972,8 @@ async function runEmlExport(
  */
 async function runSqliteExport(
   token: string, folders: MailFolder[], since: string | undefined,
-  params: ExportParams, onProgress: (msg: string) => void
+  params: ExportParams, onProgress: (msg: string) => void,
+  until?: string
 ): Promise<{ filePath: string; count: number }> {
   const dbPath   = path.join(getOutputDir(), "emails.sqlite");
   const db       = new Database(dbPath);
@@ -1035,7 +1047,7 @@ async function runSqliteExport(
     onProgress(`📁 ${folder.displayName}…`);
     const batch: object[] = [];
 
-    for await (const msg of iterFolderMessages(token, folder.id, since, selectFields)) {
+    for await (const msg of iterFolderMessages(token, folder.id, since, selectFields, true, until)) {
       total++;
       if (total % 50 === 0) onProgress(`Fetched ${total} messages…`);
 
@@ -1087,7 +1099,7 @@ async function runSqliteExport(
   onProgress(`Done: ${upserted} records upserted into ${dbPath} (${total} scanned).`);
   if (upserted === 0) return { filePath: "", count: 0 };
 
-  await maybeSaveAttachments(token, folders, since, params, onProgress);
+  await maybeSaveAttachments(token, folders, since, params, onProgress, until);
   return { filePath: dbPath, count: upserted };
 }
 
@@ -1162,22 +1174,20 @@ ipcMain.handle("list-calendars", async () => {
 
 ipcMain.handle("fetch-calendar-events", async (
   _event,
-  args: { since?: string; limit?: number }
+  args: { since?: string; until?: string; limit?: number }
 ) => {
   const onProgress = (msg: string) => send("progress", { message: msg });
   try {
     let token = await getAccessTokenSilent();
     if (!token) token = await authenticateInteractive(onProgress);
 
-    // Default start = today 00:00 local, end = 6 months out
+    // Default start = today 00:00 local, end = 6 months out (or explicit until)
     const startDt = args.since
       ? new Date(args.since).toISOString()
       : (() => { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString(); })();
-    const endDt = (() => {
-      const d = new Date(startDt);
-      d.setMonth(d.getMonth() + 6);
-      return d.toISOString();
-    })();
+    const endDt = args.until
+      ? new Date(args.until + "T23:59:59Z").toISOString()
+      : (() => { const d = new Date(startDt); d.setMonth(d.getMonth() + 6); return d.toISOString(); })();
 
     const limit = args.limit ?? 200;
     const select = "id,subject,start,end,location,organizer,attendees,bodyPreview,isAllDay,isCancelled,importance,webLink";
@@ -1208,7 +1218,7 @@ ipcMain.handle("fetch-calendar-events", async (
 
 ipcMain.handle("start-extraction", async (
   _event,
-  args: { folderIds: string[]; folderTree: MailFolder[]; since?: string; exportParams: ExportParams }
+  args: { folderIds: string[]; folderTree: MailFolder[]; since?: string; until?: string; exportParams: ExportParams }
 ) => {
   const onProgress = (msg: string) => send("progress", { message: msg });
   try {
@@ -1223,15 +1233,15 @@ ipcMain.handle("start-extraction", async (
     const selected = allFolders.filter((f) => args.folderIds.includes(f.id));
     if (selected.length === 0) { send("error", { message: "No folders selected." }); return; }
 
-    const { exportParams, since } = args;
+    const { exportParams, since, until } = args;
     let result: { filePath: string; count: number };
 
     switch (exportParams.exportFormat) {
-      case "emails-csv": result = await runEmailsCsvExport(token, selected, since, exportParams, onProgress); break;
-      case "json":       result = await runJsonExport(token, selected, since, exportParams, onProgress); break;
-      case "eml":        result = await runEmlExport(token, selected, since, exportParams, onProgress); break;
-      case "sqlite":     result = await runSqliteExport(token, selected, since, exportParams, onProgress); break;
-      default:           result = await runRecipientsExport(token, selected, since, exportParams, onProgress);
+      case "emails-csv": result = await runEmailsCsvExport(token, selected, since, exportParams, onProgress, until); break;
+      case "json":       result = await runJsonExport(token, selected, since, exportParams, onProgress, until); break;
+      case "eml":        result = await runEmlExport(token, selected, since, exportParams, onProgress, until); break;
+      case "sqlite":     result = await runSqliteExport(token, selected, since, exportParams, onProgress, until); break;
+      default:           result = await runRecipientsExport(token, selected, since, exportParams, onProgress, until);
     }
 
     if (result.count === 0) {
@@ -1252,7 +1262,7 @@ ipcMain.handle("start-extraction", async (
 // ── Preview emails (return messages as objects for on-screen display) ─────────
 ipcMain.handle("preview-emails", async (
   _event,
-  args: { folderIds: string[]; folderTree: MailFolder[]; since?: string; limit?: number; flaggedOnly?: boolean }
+  args: { folderIds: string[]; folderTree: MailFolder[]; since?: string; until?: string; limit?: number; flaggedOnly?: boolean }
 ) => {
   const onProgress = (msg: string) => send("progress", { message: msg });
   try {
@@ -1273,7 +1283,7 @@ ipcMain.handle("preview-emails", async (
 
     for (const folder of selected) {
       onProgress(`📁 Loading ${folder.displayName}…`);
-      for await (const msg of iterFolderMessages(token, folder.id, args.since, selectFields, false)) {
+      for await (const msg of iterFolderMessages(token, folder.id, args.since, selectFields, false, args.until)) {
         if (args.flaggedOnly) {
           const flagStatus = ((msg["flag"] as Record<string,string>|undefined)?.["flagStatus"]) ?? "";
           if (flagStatus !== "flagged") continue;
