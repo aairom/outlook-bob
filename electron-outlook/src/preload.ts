@@ -186,6 +186,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   }): Promise<{ canceled: boolean; filePaths: string[] }> =>
     ipcRenderer.invoke("show-open-dialog", args),
 
+  readFile: (path: string): Promise<{ ok: boolean; content?: string; error?: string }> =>
+    ipcRenderer.invoke("read-file", { path }),
+
+  writeFile: (path: string, content: string): Promise<{ ok: boolean; error?: string }> =>
+    ipcRenderer.invoke("write-file", { path, content }),
+
   processEmlFolder: (args: {
     folderPath: string;
     promptContent: string;

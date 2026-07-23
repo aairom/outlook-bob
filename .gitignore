@@ -37,8 +37,9 @@ extract_outlook_token.json
 .bob/mcp.json
 
 
-# Prompt files — may contain sensitive instructions, keep local
-prompts/
+# Prompt folder — keep the folder itself but ignore its content
+prompts/*
+!prompts/.gitkeep
 
 # Binary / large files — never commit
 *.onnx

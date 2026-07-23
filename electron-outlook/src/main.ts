@@ -1451,6 +1451,24 @@ ipcMain.handle("show-open-dialog", async (_event, args: {
   return result;
 });
 
+ipcMain.handle("read-file", async (_event, args: { path: string }) => {
+  try {
+    const content = fs.readFileSync(args.path, "utf-8");
+    return { ok: true, content };
+  } catch (err: unknown) {
+    return { ok: false, error: String(err) };
+  }
+});
+
+ipcMain.handle("write-file", async (_event, args: { path: string; content: string }) => {
+  try {
+    fs.writeFileSync(args.path, args.content, "utf-8");
+    return { ok: true };
+  } catch (err: unknown) {
+    return { ok: false, error: String(err) };
+  }
+});
+
 // ── EML → Monday triage ──────────────────────────────────────────────────────
 
 /** Strip HTML tags and collapse whitespace to plain text. */
