@@ -5,14 +5,19 @@
 The **Electron Folder Extractor** is a native desktop app that authenticates against
 Microsoft Identity Platform via OAuth 2.0 Authorization Code + PKCE, fetches your
 mailbox folder tree through the Microsoft Graph API, and exports selected emails in
-one of five formats — all without storing any password.
+one of six formats — all without storing any password.
 
 The app also integrates with **Monday.com**: a dedicated card lets you view all your
 Monday boards (name, workspace, item count, state) by calling the Monday GraphQL API
 directly from the main process using the token stored in `.bob/mcp.json`.
 
-A sixth **Preview** format lets you browse emails directly on-screen (up to 200) without
+A dedicated **Preview** format lets you browse emails directly on-screen (up to 200) without
 writing any file — messages appear in a scrollable list with a reading pane and live search.
+
+A **Calendar Events** card lets you browse your Microsoft 365 calendar events (from today,
+up to 6 months ahead), grouped by day, with a detail pane per event and CSV export of
+selected events. This feature requires the `Calendars.Read` delegated permission to be
+declared in the Azure App Registration — see [Calendar Access Requirement](#calendar-access-requirement) below.
 
 The **Output Destination** card lets users choose where extracted files go:
 - 💻 **Local only** (default) — saved to `electron-outlook/output/`
@@ -36,9 +41,9 @@ flowchart TD
     MCPCFG[".bob/mcp.json (workspace root)\nMonday API token (preferred)"]
 
     subgraph App["electron-outlook — Electron Desktop App"]
-        MAIN["main.ts\nMain process\nAuth · Graph API · Export logic · ZIP\nMonday GraphQL client · Preview handler\nEmail→Monday item+update handler"]
+        MAIN["main.ts\nMain process\nAuth · Graph API · Export logic · ZIP\nMonday GraphQL client · Preview handler\nCalendar handler · Email→Monday handler"]
         PRE["preload.ts\nContext bridge\nIPC channel definitions"]
-        UI["renderer/index.html\nRenderer process\nFolder tree · Export options UI\nPreview card · Monday Boards card\nBoard picker · Send to Monday\nresetUI() on every boot"]
+        UI["renderer/index.html\nRenderer process\nFolder tree · Export options UI\nPreview card · Calendar Events card\nMonday Boards card · Send to Monday\nresetUI() on every boot"]
     end
 
     subgraph Microsoft["Microsoft Cloud"]
@@ -150,6 +155,8 @@ flowchart TD
 | `get-status` | renderer → main | — | Check if a valid Microsoft token exists |
 | `connect` | renderer → main | — | Start Microsoft interactive OAuth PKCE flow |
 | `list-folders` | renderer → main | — | Fetch full folder tree recursively |
+| `list-calendars` | renderer → main | — | List user's Microsoft 365 calendars via `GET /me/calendars` |
+| `fetch-calendar-events` | renderer → main | `since?, limit?` | Fetch calendar events via `GET /me/calendarView` — requires `Calendars.Read` in Azure App Registration |
 | `start-extraction` | renderer → main | `folderIds, folderTree, since?, exportParams` | Run export to file |
 | `preview-emails` | renderer → main | `folderIds, folderTree, since?, limit?, flaggedOnly?` | Fetch messages for on-screen display (no file written) |
 | `download-selected-emails` | renderer → main | `messages: PreviewMessage[]` | Save selected preview emails as `.eml` files to `output/preview_download_TIMESTAMP/` |
@@ -174,8 +181,52 @@ flowchart TD
 | `progress` | main → renderer | `{ message }` | Live status updates during extraction |
 | `done` | main → renderer | `{ outputPath, count, format }` | Extraction complete |
 | `error` | main → renderer | `{ message }` | Error notification |
+| `read-file` | renderer → main | `path` | Read a local file from disk (used by prompt editor) |
+| `write-file` | renderer → main | `path, content` | Write a local file to disk (used by prompt editor save) |
 | `monday-error` | main → renderer | `{ message }` | Monday API error notification |
 | `eml-triage-progress` | main → renderer | `{ message }` | Live progress updates during EML folder triage |
+
+---
+
+## Calendar Access Requirement
+
+The **Calendar Events** feature calls `GET /me/calendarView` on the Microsoft Graph API.
+This endpoint requires the `Calendars.Read` **delegated** permission.
+
+### Why corporate M365 tenants block it
+
+Microsoft Entra ID (Azure AD) enforces that any scope requested at runtime must be
+**pre-declared** in the Azure App Registration's API permissions list. If `Calendars.Read`
+is not declared, corporate tenants reject the request and display an "admin approval
+required" screen — even though the delegated version of this permission does **not**
+actually require admin consent.
+
+### Permission reference
+
+| Permission | Type | Admin consent required |
+|---|---|---|
+| `Calendars.Read` (Application) | App-only, no sign-in | **Yes** |
+| `Calendars.Read` (Delegated) | User signs in interactively | **No** |
+
+This app uses **delegated** permissions (user signs in via PKCE) — so no admin consent
+is needed. The only requirement is that `Calendars.Read` is listed in the app registration.
+
+### How to enable it
+
+1. Go to [portal.azure.com](https://portal.azure.com) → **Entra ID → App registrations**
+2. Search for App ID: `14d82eec-204b-4c2f-b7e8-296a70dab67e`
+3. **API permissions → Add a permission → Microsoft Graph → Delegated permissions**
+4. Search for and select **`Calendars.Read`** → click **Add permissions**
+5. Re-authenticate once in the app (Reconnect, or delete `~/.cache/extract_outlook_token_folder.json`)
+
+> Only the **owner of the app registration** needs to do this — not a tenant IT admin.
+> All email features work normally without this step.
+
+### Behaviour when not enabled
+
+When `Calendars.Read` is not declared, clicking **📅 Load Calendar** returns a 403 from
+the Graph API. The app catches this and shows a clear actionable message in the Progress
+log — authentication is not disrupted and all email features continue to work normally.
 
 ---
 

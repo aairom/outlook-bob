@@ -2,8 +2,8 @@
 
 A native Electron desktop app that connects to your **Microsoft 365 mailbox** via the
 Microsoft Graph API (OAuth 2.0 PKCE — no password stored), lets you pick any folders
-interactively, and exports emails in your preferred format. The app also includes a
-**Monday.com Boards** panel to browse your boards without switching context.
+interactively, and exports emails or **calendar events** in your preferred format.
+The app also includes a **Monday.com Boards** panel to browse your boards without switching context.
 
 > **Fresh start on every launch** — all options (format, fields, filters, date, ZIP)
 > are reset to their defaults when the app opens. Nothing is remembered between sessions.
@@ -18,8 +18,9 @@ interactively, and exports emails in your preferred format. The app also include
 | npm 9+ | Build only | `npm --version` |
 | Microsoft 365 account | Always | — |
 | Monday.com account | Monday Boards panel only | — |
+| `Calendars.Read` in Azure App Registration | **Calendar feature only** | See [§ 6 — Calendar](#step-2b--load-calendar-optional) |
 
-No Azure App Registration needed — the default `CLIENT_ID` uses Microsoft's public
+No Azure App Registration needed for **email features** — the default `CLIENT_ID` uses Microsoft's public
 **Graph Explorer** client (`14d82eec-204b-4c2f-b7e8-296a70dab67e`), which is a
 multi-tenant application published by Microsoft itself. It works for any Microsoft 365
 or personal Outlook account.
@@ -35,6 +36,16 @@ or personal Outlook account.
 > If your organisation enforces admin-consent policies that block the Graph Explorer
 > client, or if you need to distribute the app inside a company tenant, register your
 > own Azure App and set `CLIENT_ID` in `.env` (see § 4 for instructions).
+
+> **Calendar feature and the Graph Explorer client ID:**
+> The calendar feature requires the `Calendars.Read` delegated permission to be declared
+> in the Azure App Registration. If you are using the default Graph Explorer `CLIENT_ID`,
+> this scope is **already available** for personal Microsoft accounts, but corporate
+> M365 tenants may block undeclared scopes. To use a corporate account, either:
+> - Add `Calendars.Read` to the default app registration (requires access to `portal.azure.com`)
+> - Or register your own Azure App with `Mail.Read` + `Calendars.Read` and set `CLIENT_ID` in `.env`
+>
+> See the full setup steps in [README — Calendar Feature](../README.md#calendar-feature).
 
 The Monday Boards panel (and the **Send to Monday** feature) read the API token from
 `.bob/mcp.json` at the project root. See [§ 3. Monday MCP Setup](#3-monday-mcp-setup) below.
@@ -411,6 +422,26 @@ and renders it with item counts and expand/collapse controls.
 - Click **▶** to expand sub-folders.
 - Use **Select all** / **Deselect all** to toggle all at once.
 
+### Step 2b — Load Calendar *(optional)*
+
+Click **📅 Load Calendar** to fetch your Microsoft 365 calendar events starting from today (or from the "Scan since" date if set). Events appear in a dedicated **Calendar Events** card:
+
+- Events are **grouped by day** — today is highlighted with a 📍 marker
+- Each row shows: event title · time range · location
+- Click any row to open a **detail pane** showing full when/where/organiser/attendees/description
+- Tick checkboxes to select events
+- Click **⬇ Export selected as CSV** to download `calendar_events_TIMESTAMP.csv`
+
+> **⚠️ Calendar access requires a one-time Azure setup.**
+> If you see "Calendar access is blocked (403)" in the Progress log:
+> 1. Go to [portal.azure.com](https://portal.azure.com) → **Entra ID → App registrations**
+> 2. Search App ID: `14d82eec-204b-4c2f-b7e8-296a70dab67e`
+> 3. **API permissions → Add a permission → Microsoft Graph → Delegated → `Calendars.Read`**
+> 4. Click **Reconnect** in the app to get a fresh token
+>
+> This does **not** require IT admin consent — only the app owner needs to do it once.
+> All email features work normally without this step.
+
 ### Step 3 — Choose export format
 
 | Format | Output | Notes |
@@ -421,6 +452,7 @@ and renders it with item counts and expand/collapse controls.
 | **JSON** | Structured array of message objects plus Outlook identifiers | Timestamped file |
 | **SQLite** | Persistent `output/emails.sqlite` database with Outlook identifiers | **Not timestamped** — re-run safe (no duplicates) |
 | **Preview** | Emails displayed on-screen — no file written | Click **👁 Preview Emails** instead of Run Extraction |
+| **Calendar CSV** | Selected calendar events exported as CSV | Use **📅 Load Calendar** first |
 
 > **SQLite is idempotent.** Records are upserted on `message_id` — re-running adds
 > new messages and refreshes existing ones without ever creating duplicates.
@@ -767,7 +799,8 @@ Remove-Item "$env:USERPROFILE\.cache\extract_outlook_token_folder.json" -ErrorAc
 | Browser doesn't open for sign-in | Copy the auth URL printed to the terminal and paste it into your browser |
 | Port 8765 already in use | Change `REDIRECT_URI=http://localhost:XXXX` in `.env` and update your Azure App Registration |
 | `HTTP 401` | Delete the token cache (§ 7 above) and reconnect |
-| `HTTP 403` | Admin consent for `Mail.Read` may be required in your organisation's tenant |
+| `HTTP 403` on email | Admin consent for `Mail.Read` may be required in your organisation's tenant |
+| Calendar shows "blocked 403" | `Calendars.Read` not declared in Azure App Registration — see [Calendar setup](#step-2b--load-calendar-optional) |
 | Body text column is empty | Ensure "Body (plain text)" is ticked — the toggle was off |
 | App blocked by macOS Gatekeeper | Right-click Electron.app → Open → confirm in the dialog |
 | Script blocked by Windows SmartScreen | Run `Set-ExecutionPolicy -Scope CurrentUser RemoteSigned` in an elevated PowerShell |

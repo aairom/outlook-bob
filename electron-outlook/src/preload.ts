@@ -186,6 +186,12 @@ contextBridge.exposeInMainWorld("electronAPI", {
   }): Promise<{ canceled: boolean; filePaths: string[] }> =>
     ipcRenderer.invoke("show-open-dialog", args),
 
+  listCalendars: (): Promise<{ calendars: Array<{ id: string; displayName: string; color: string; isDefaultCalendar: boolean; canEdit: boolean }> }> =>
+    ipcRenderer.invoke("list-calendars"),
+
+  fetchCalendarEvents: (args: { since?: string; limit?: number }): Promise<{ events: unknown[]; error?: string }> =>
+    ipcRenderer.invoke("fetch-calendar-events", args),
+
   readFile: (path: string): Promise<{ ok: boolean; content?: string; error?: string }> =>
     ipcRenderer.invoke("read-file", { path }),
 

@@ -9,17 +9,48 @@ import * as dotenv from "dotenv";
 import Database from "better-sqlite3";
 import { ZipArchive } from "archiver";
 
-// ── Load shared .env from project root ────────────────────────────────────────
-const _envCandidates = [
-  path.join(__dirname, "..", "..", ".env"),
-  path.join(__dirname, "..", "..", "..", ".env"),
-  path.join(process.resourcesPath ?? "", ".env"),
-  path.join(process.cwd(), ".env"),
-  path.join(process.cwd(), "..", ".env"),
-];
-for (const candidate of _envCandidates) {
-  if (fs.existsSync(candidate)) { dotenv.config({ path: candidate }); break; }
+// ── Resolve project root & load .env ──────────────────────────────────────────
+// The anchor file (~/.config/outlook-bob/config.json) is written by the launch
+// script on every run. It is the only reliable way to locate project secrets
+// when the app is launched via open -a or by double-clicking the .app bundle,
+// because macOS strips environment variables in both cases.
+function _resolveSecrets(): void {
+  // 1. Determine home dir — process.env.HOME works before app.ready
+  const homeDir =
+    process.env.HOME ??
+    process.env.USERPROFILE ??
+    (app.isReady() ? app.getPath("home") : "");
+
+  // 2. Try the anchor file first
+  let bobRoot = "";
+  const anchorPath = path.join(homeDir, ".config", "outlook-bob", "config.json");
+  try {
+    const anchor = JSON.parse(fs.readFileSync(anchorPath, "utf8"));
+    bobRoot = anchor.projectRoot ?? "";
+  } catch { /* not written yet */ }
+
+  // 3. Build .env candidate list — bobRoot path wins if found
+  const envCandidates = [
+    ...(bobRoot ? [path.join(bobRoot, ".env")] : []),
+    path.join(homeDir, ".config", "outlook-bob", ".env"), // secondary user-level location
+    path.join(__dirname, "..", "..", ".env"),
+    path.join(__dirname, "..", "..", "..", ".env"),
+    path.join(process.resourcesPath ?? "", ".env"),
+    path.join(process.cwd(), ".env"),
+    path.join(process.cwd(), "..", ".env"),
+  ];
+  for (const c of envCandidates) {
+    try {
+      if (fs.existsSync(c)) { dotenv.config({ path: c }); break; }
+    } catch { /* skip */ }
+  }
+
+  // 4. Store bobRoot globally for mcp.json resolution below
+  _bobRoot = bobRoot;
 }
+
+let _bobRoot = "";
+_resolveSecrets();
 
 // ── Config ────────────────────────────────────────────────────────────────────
 const CLIENT_ID       = process.env.CLIENT_ID     ?? "14d82eec-204b-4c2f-b7e8-296a70dab67e";
@@ -206,10 +237,14 @@ async function refreshAccessToken(refreshToken: string): Promise<TokenCache> {
   return cache;
 }
 
-async function getAccessTokenSilent(): Promise<string | null> {
+async function getAccessTokenSilent(requiredScopes?: string[]): Promise<string | null> {
   const cache = loadTokenCache();
   if (!cache) return null;
-  if (Date.now() < cache.expires_at) return cache.access_token;
+  // If the cached token is missing a required scope, force a refresh so the
+  // new SCOPES constant (which may have grown) is sent to the token endpoint.
+  const cachedScopes = (cache.scope ?? "").toLowerCase().split(/\s+/);
+  const missingScope = requiredScopes?.some(s => !cachedScopes.includes(s.toLowerCase()));
+  if (!missingScope && Date.now() < cache.expires_at) return cache.access_token;
   if (cache.refresh_token) {
     try { return (await refreshAccessToken(cache.refresh_token)).access_token; }
     catch { clearTokenCache(); return null; }
@@ -359,6 +394,32 @@ async function listFoldersRecursive(token: string, parentId?: string): Promise<M
       results.push(node);
     }
     url = page["@odata.nextLink"] ?? null;
+  }
+  return results;
+}
+
+// ── List calendars ────────────────────────────────────────────────────────────
+interface CalendarEntry {
+  id: string;
+  displayName: string;
+  color: string;
+  isDefaultCalendar: boolean;
+  canEdit: boolean;
+}
+
+async function listCalendars(token: string): Promise<CalendarEntry[]> {
+  const url = `${GRAPH_BASE}/me/calendars?$select=id,name,color,isDefaultCalendar,canEdit&$top=100`;
+  const results: CalendarEntry[] = [];
+  let nextUrl: string | null = url;
+  while (nextUrl) {
+    const page = (await graphGet(token, nextUrl)) as {
+      value: Array<{ id: string; name: string; color: string; isDefaultCalendar: boolean; canEdit: boolean }>;
+      "@odata.nextLink"?: string;
+    };
+    for (const c of page.value) {
+      results.push({ id: c.id, displayName: c.name, color: c.color, isDefaultCalendar: c.isDefaultCalendar, canEdit: c.canEdit });
+    }
+    nextUrl = page["@odata.nextLink"] ?? null;
   }
   return results;
 }
@@ -1085,6 +1146,66 @@ ipcMain.handle("list-folders", async () => {
   }
 });
 
+ipcMain.handle("list-calendars", async () => {
+  const onProgress = (msg: string) => send("progress", { message: msg });
+  try {
+    let token = await getAccessTokenSilent();
+    if (!token) token = await authenticateInteractive(onProgress);
+    onProgress("Fetching calendar list…");
+    const calendars = await listCalendars(token);
+    return { calendars };
+  } catch (err) {
+    send("error", { message: err instanceof Error ? err.message : String(err) });
+    return { calendars: [] };
+  }
+});
+
+ipcMain.handle("fetch-calendar-events", async (
+  _event,
+  args: { since?: string; limit?: number }
+) => {
+  const onProgress = (msg: string) => send("progress", { message: msg });
+  try {
+    let token = await getAccessTokenSilent();
+    if (!token) token = await authenticateInteractive(onProgress);
+
+    // Default start = today 00:00 local, end = 6 months out
+    const startDt = args.since
+      ? new Date(args.since).toISOString()
+      : (() => { const d = new Date(); d.setHours(0,0,0,0); return d.toISOString(); })();
+    const endDt = (() => {
+      const d = new Date(startDt);
+      d.setMonth(d.getMonth() + 6);
+      return d.toISOString();
+    })();
+
+    const limit = args.limit ?? 200;
+    const select = "id,subject,start,end,location,organizer,attendees,bodyPreview,isAllDay,isCancelled,importance,webLink";
+    const url = `${GRAPH_BASE}/me/calendarView?startDateTime=${encodeURIComponent(startDt)}&endDateTime=${encodeURIComponent(endDt)}&$select=${select}&$top=${limit}&$orderby=start/dateTime`;
+
+    onProgress("Fetching calendar events…");
+    const page = (await graphGet(token, url)) as { value: unknown[] };
+    return { events: page.value ?? [] };
+  } catch (err) {
+    const msg = err instanceof Error ? err.message : String(err);
+    // 403 from calendarView = Calendars.Read not declared in Azure App Registration.
+    // Delegated Calendars.Read does NOT require admin consent, but the scope must be
+    // declared in the app registration (portal.azure.com → App registrations →
+    // API permissions → Add → Microsoft Graph → Delegated → Calendars.Read).
+    if (msg.includes("403")) {
+      return {
+        events: [],
+        error: "Calendar access is blocked (403). The 'Calendars.Read' delegated permission " +
+               "needs to be added to the Azure App Registration (portal.azure.com → " +
+               "Entra ID → App registrations → API permissions). " +
+               "This does NOT require an IT admin — only the app owner needs to add it. " +
+               "App ID: " + CLIENT_ID,
+      };
+    }
+    return { events: [], error: msg };
+  }
+});
+
 ipcMain.handle("start-extraction", async (
   _event,
   args: { folderIds: string[]; folderTree: MailFolder[]; since?: string; exportParams: ExportParams }
@@ -1267,8 +1388,19 @@ ipcMain.handle("open-file", async (_event, args: { path: string }) => {
 // Token resolution order (first non-empty value wins):
 //   1. .bob/mcp.json  mcpServers.monday.headers.Authorization  (Bob MCP server — preferred)
 //   2. MONDAY_API_TOKEN environment variable from .env          (standalone / CI fallback)
-const MONDAY_API_TOKEN = (() => {
+//
+// Resolved lazily at each call so that double-click launches (where the anchor
+// file may not be read yet at module load time) still work after app.ready.
+function getMondayToken(): string | null {
+  // Re-run secret resolution in case app is now ready and home dir is available
+  if (!_bobRoot && app.isReady()) {
+    _resolveSecrets();
+  }
+
+  const homeDir = process.env.HOME ?? process.env.USERPROFILE ?? (app.isReady() ? app.getPath("home") : "");
   const candidates = [
+    ...(_bobRoot ? [path.join(_bobRoot, ".bob", "mcp.json")] : []),
+    ...(homeDir ? [path.join(homeDir, ".config", "outlook-bob", "mcp.json")] : []),
     path.join(__dirname, "..", "..", "..", ".bob", "mcp.json"),
     path.join(__dirname, "..", "..", ".bob", "mcp.json"),
     path.join(process.resourcesPath ?? "", ".bob", "mcp.json"),
@@ -1282,15 +1414,15 @@ const MONDAY_API_TOKEN = (() => {
       if (token) return token as string;
     } catch { /* not found */ }
   }
-  // Fallback: MONDAY_API_TOKEN from .env (loaded at startup via dotenv).
-  // Strip any accidental surrounding quotes that editors/dotenv may add.
+  // Fallback: MONDAY_API_TOKEN from .env
   const envToken = (process.env.MONDAY_API_TOKEN ?? "").replace(/^["']|["']$/g, "").trim();
   if (envToken) return envToken;
   return null;
-})();
+}
 
 function mondayGraphQL(query: string): Promise<unknown> {
   return new Promise((resolve, reject) => {
+    const MONDAY_API_TOKEN = getMondayToken();
     if (!MONDAY_API_TOKEN) {
       reject(new Error("Monday API token not configured. Set it in .bob/mcp.json (mcpServers.monday.headers.Authorization) or as MONDAY_API_TOKEN in .env"));
       return;

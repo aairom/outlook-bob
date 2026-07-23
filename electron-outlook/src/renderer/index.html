@@ -177,6 +177,9 @@
 
     #btn-connect        { background: var(--border);  color: var(--text); }
     #btn-load-folders   { background: var(--accent2); color: #1e1e2e; }
+    #btn-load-calendar  { background: #a6e3a1; color: #1e1e2e; }
+    #btn-load-calendar:disabled { opacity: 0.45; cursor: default; }
+    #btn-reset-all      { background: #f38ba8; color: #1e1e2e; }
     #btn-extract        { background: var(--accent);  color: #fff; }
     #btn-open-output    { background: var(--ok);      color: #1e1e2e; display: none; }
     #btn-run-again      { background: var(--border);  color: var(--text); display: none; }
@@ -300,7 +303,56 @@
     body.light .att-type-chip.all-chip.on { background: #dcfce7; color: #16a34a; }
 
     /* ── Email Preview Viewer ── */
-    #preview-card { display: none; }
+    #preview-card   { display: none; }
+    #calendar-card  { display: none; }
+    #cal-list-wrap {
+      background: #1e1e2e; border: 1px solid #45475a; border-radius: 8px;
+      overflow-x: hidden; overflow-y: auto; max-height: 480px;
+    }
+    .cal-day-header {
+      padding: 6px 12px; background: #181825;
+      font-size: 11px; font-weight: 700; color: #89b4fa;
+      letter-spacing: 0.06em; text-transform: uppercase;
+      position: sticky; top: 0; z-index: 1;
+    }
+    .cal-day-header.today { color: #a6e3a1; }
+    .cal-event-row {
+      display: flex; align-items: flex-start; gap: 10px;
+      padding: 9px 12px; border-bottom: 1px solid #313244;
+      cursor: pointer; transition: background 0.1s;
+      -webkit-app-region: no-drag;
+    }
+    .cal-event-row:last-child { border-bottom: none; }
+    .cal-event-row:hover  { background: #26263a; }
+    .cal-event-row.selected { background: #2a2040; border-left: 3px solid #cba6f7; padding-left: 9px; }
+    .cal-event-row.checked  { background: #201830; }
+    .cal-event-meta { flex: 1; min-width: 0; }
+    .cal-event-title { font-size: 13px; font-weight: 600; color: #cdd6f4; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .cal-event-time  { font-size: 11px; color: #6c7086; white-space: nowrap; }
+    .cal-event-loc   { font-size: 11px; color: #6c7086; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; margin-top: 2px; }
+    .cal-event-cancelled { text-decoration: line-through; opacity: 0.55; }
+    /* Event detail pane */
+    #cal-pane {
+      display: none; background: #1e1e2e; border: 1px solid #45475a;
+      border-radius: 8px; padding: 16px; margin-top: 10px;
+    }
+    #cal-pane-title { font-size: 15px; font-weight: 700; color: #cdd6f4; margin-bottom: 8px; }
+    .cal-pane-meta  { font-size: 12px; color: #a6adc8; margin-bottom: 3px; }
+    .cal-pane-meta span { color: #cdd6f4; }
+    #cal-pane-body  { font-size: 13px; color: #a6adc8; white-space: pre-wrap; word-break: break-word;
+      max-height: 260px; overflow-y: auto; line-height: 1.7; margin-top: 10px;
+      border-top: 1px solid #45475a; padding-top: 10px; }
+    #cal-empty { font-size: 13px; color: #6c7086; padding: 14px 0; text-align: center; display: none; }
+    #cal-toolbar {
+      display: flex; align-items: center; gap: 10px; flex-wrap: wrap;
+      margin-bottom: 10px;
+    }
+    #cal-count { font-size: 12px; color: #6c7086; }
+    #cal-selected-bar {
+      display: none; align-items: center; gap: 10px; flex-wrap: wrap;
+      padding: 8px 12px; background: #2a2040; border-radius: 8px; margin-bottom: 8px;
+      font-size: 12px; color: #cdd6f4;
+    }
     #preview-toolbar {
       display: flex; align-items: center; gap: 10px; margin-bottom: 12px; flex-wrap: wrap;
     }
@@ -785,6 +837,8 @@
     <div class="btn-row" style="margin-top:0;">
       <button id="btn-connect">Connect to Microsoft</button>
       <button id="btn-load-folders" disabled>Load Folders</button>
+      <button id="btn-load-calendar" disabled>📅 Load Calendar</button>
+      <button id="btn-reset-all">🔄 Reset All</button>
     </div>
   </div>
 
@@ -846,6 +900,11 @@
         <span class="fmt-name">Preview</span>
         <span class="fmt-desc">Browse emails on‑screen (up to 200)</span>
       </div>
+      <div class="format-btn" data-format="calendar-csv">
+        <span class="fmt-icon">📅</span>
+        <span class="fmt-name">Calendar CSV</span>
+        <span class="fmt-desc">Export calendar events as CSV</span>
+      </div>
     </div>
 
     <!-- Field toggles (hidden for recipients-csv) -->
@@ -884,7 +943,7 @@
 
     <!-- Domain filter -->
     <div class="domain-row">
-      <input type="checkbox" id="chk-filter-domain" checked />
+      <input type="checkbox" id="chk-filter-domain" />
       <label for="chk-filter-domain" style="-webkit-app-region:no-drag; cursor:pointer;">
         Exclude addresses containing
       </label>
@@ -1089,7 +1148,7 @@
   <!-- ── Date + run card ── -->
   <div class="card">
     <div class="date-row">
-      <label class="field-label" for="since-date">Scan emails since (optional)</label>
+      <label class="field-label" for="since-date">Scan emails / calendar events since (optional)</label>
       <input type="date" id="since-date" />
       <span class="date-row-sep"></span>
       <input type="checkbox" id="chk-zip-output" style="-webkit-app-region:no-drag; width:14px; height:14px; accent-color:var(--accent); cursor:pointer;" />
@@ -1155,6 +1214,31 @@
         <div class="email-pane-meta">Folder: <span id="email-pane-folder"></span></div>
       </div>
       <div id="email-pane-body"></div>
+    </div>
+  </div>
+
+  <!-- ── Calendar Events card ── -->
+  <div class="card" id="calendar-card">
+    <div id="cal-toolbar">
+      <p class="section-title" style="margin:0;">📅 Calendar Events</p>
+      <span id="cal-count"></span>
+      <button id="btn-cal-select-all">Select all</button>
+      <button id="btn-cal-deselect-all">Deselect all</button>
+    </div>
+    <div id="cal-selected-bar">
+      <span id="cal-selected-count">0</span> event(s) selected
+      <button id="btn-export-cal-events">⬇ Export selected as CSV</button>
+    </div>
+    <div id="cal-list-wrap">
+      <div id="cal-empty">No events found.</div>
+    </div>
+    <div id="cal-pane">
+      <div id="cal-pane-title"></div>
+      <div class="cal-pane-meta">📅 <span id="cal-pane-when"></span></div>
+      <div class="cal-pane-meta">📍 <span id="cal-pane-loc"></span></div>
+      <div class="cal-pane-meta">👤 <span id="cal-pane-organizer"></span></div>
+      <div class="cal-pane-meta">👥 <span id="cal-pane-attendees"></span></div>
+      <div id="cal-pane-body"></div>
     </div>
   </div>
 
@@ -1295,6 +1379,7 @@
     const statusText      = document.getElementById("status-text");
     const btnConnect      = document.getElementById("btn-connect");
     const btnLoadFolders  = document.getElementById("btn-load-folders");
+    const btnLoadCalendar = document.getElementById("btn-load-calendar");
     const btnSelectAll    = document.getElementById("btn-select-all");
     const btnDeselectAll  = document.getElementById("btn-deselect-all");
     const btnExtract      = document.getElementById("btn-extract");
@@ -1338,9 +1423,10 @@
       const isRecipients = selectedFormat === "recipients-csv";
       const isEml        = selectedFormat === "eml";
       const isPreview    = selectedFormat === "preview";
-      fieldSection.style.display        = (isRecipients || isPreview) ? "none" : "block";
+      const isCalendar   = selectedFormat === "calendar-csv";
+      fieldSection.style.display        = (isRecipients || isPreview || isCalendar) ? "none" : "block";
       emlHint.style.display             = isEml        ? "block" : "none";
-      attTypeSection.style.display      = chkSaveAttachments.checked && !isPreview ? "block" : "none";
+      attTypeSection.style.display      = chkSaveAttachments.checked && !isPreview && !isCalendar ? "block" : "none";
       // ZIP not applicable in preview mode; hide it
       const zipLabel = document.querySelector("label[for='chk-zip-output']");
       const zipCheck = document.getElementById("chk-zip-output");
@@ -1448,11 +1534,13 @@
         statusText.textContent = "Connected";
         btnConnect.textContent = "Reconnect";
         btnLoadFolders.disabled = false;
+        btnLoadCalendar.disabled = false;
       } else {
         statusBadge.className = "unauthed";
         statusText.textContent = "Not authenticated";
         btnConnect.textContent = "Connect to Microsoft";
         btnLoadFolders.disabled = true;
+        btnLoadCalendar.disabled = true;
         btnExtract.disabled = true;
       }
       // OneDrive shares the Microsoft token — keep its badge in sync
@@ -1611,6 +1699,193 @@
       btnLoadFolders.textContent = "Refresh Folders";
     });
 
+    // ── Calendar card refs ────────────────────────────────────────────────────
+    const calendarCard     = document.getElementById("calendar-card");
+    const calListWrap      = document.getElementById("cal-list-wrap");
+    const calEmpty         = document.getElementById("cal-empty");
+    const calCount         = document.getElementById("cal-count");
+    const calSelectedBar   = document.getElementById("cal-selected-bar");
+    const calSelectedCount = document.getElementById("cal-selected-count");
+    const calPane          = document.getElementById("cal-pane");
+    const calPaneTitle     = document.getElementById("cal-pane-title");
+    const calPaneWhen      = document.getElementById("cal-pane-when");
+    const calPaneLoc       = document.getElementById("cal-pane-loc");
+    const calPaneOrganizer = document.getElementById("cal-pane-organizer");
+    const calPaneAttendees = document.getElementById("cal-pane-attendees");
+    const calPaneBody      = document.getElementById("cal-pane-body");
+
+    let _calEvents = [];          // all loaded events
+    let _calChecked = new Set();  // checked event ids
+
+    function fmtCalDate(iso, isAllDay) {
+      if (!iso) return "";
+      if (isAllDay) return new Date(iso).toLocaleDateString(undefined, { weekday:"short", year:"numeric", month:"short", day:"numeric" });
+      return new Date(iso).toLocaleString(undefined, { weekday:"short", month:"short", day:"numeric", hour:"2-digit", minute:"2-digit" });
+    }
+
+    function calDayKey(iso, isAllDay) {
+      const d = isAllDay ? iso.slice(0,10) : new Date(iso).toISOString().slice(0,10);
+      return d;
+    }
+
+    function renderCalEvents(events) {
+      // Clear everything except the #cal-empty sentinel
+      [...calListWrap.children].forEach(el => { if (el.id !== "cal-empty") el.remove(); });
+      calPane.style.display = "none";
+      _calChecked.clear();
+
+      if (!events.length) {
+        calEmpty.style.display = "block";
+        calCount.textContent = "No events";
+        calSelectedBar.style.display = "none";
+        return;
+      }
+      calEmpty.style.display = "none";
+      calCount.textContent = events.length + " event(s)";
+
+      const todayKey = new Date().toISOString().slice(0,10);
+      let lastDay = null;
+
+      events.forEach(ev => {
+        const startIso = ev.start?.dateTime ?? ev.start?.date ?? "";
+        const dayKey   = calDayKey(startIso, ev.isAllDay);
+
+        // Day separator
+        if (dayKey !== lastDay) {
+          lastDay = dayKey;
+          const hdr = document.createElement("div");
+          hdr.className = "cal-day-header" + (dayKey === todayKey ? " today" : "");
+          const label = dayKey === todayKey ? "📍 Today — " : "";
+          hdr.textContent = label + new Date(dayKey + "T12:00:00").toLocaleDateString(undefined, { weekday:"long", year:"numeric", month:"long", day:"numeric" });
+          calListWrap.appendChild(hdr);
+        }
+
+        const row = document.createElement("div");
+        row.className = "cal-event-row" + (ev.isCancelled ? " cal-event-cancelled" : "");
+        row.dataset.evId = ev.id;
+
+        const chk = document.createElement("input");
+        chk.type = "checkbox";
+        chk.style.cssText = "flex-shrink:0; margin-top:2px; accent-color:#cba6f7; cursor:pointer; -webkit-app-region:no-drag;";
+        chk.addEventListener("click", e => {
+          e.stopPropagation();
+          if (chk.checked) { _calChecked.add(ev.id); row.classList.add("checked"); }
+          else             { _calChecked.delete(ev.id); row.classList.remove("checked"); }
+          calSelectedCount.textContent = _calChecked.size;
+          calSelectedBar.style.display = _calChecked.size ? "flex" : "none";
+        });
+
+        const meta = document.createElement("div");
+        meta.className = "cal-event-meta";
+
+        const title = document.createElement("div");
+        title.className = "cal-event-title";
+        title.textContent = (ev.isCancelled ? "❌ " : "") + (ev.subject || "(No title)");
+
+        const endIso  = ev.end?.dateTime ?? ev.end?.date ?? "";
+        const timeStr = ev.isAllDay ? "All day" : fmtCalDate(startIso, false) + (endIso ? " → " + new Date(endIso).toLocaleTimeString(undefined,{hour:"2-digit",minute:"2-digit"}) : "");
+        const time = document.createElement("div");
+        time.className = "cal-event-time";
+        time.textContent = timeStr;
+
+        const loc = document.createElement("div");
+        loc.className = "cal-event-loc";
+        loc.textContent = ev.location?.displayName ?? "";
+
+        meta.append(title, time);
+        if (loc.textContent) meta.appendChild(loc);
+        row.append(chk, meta);
+
+        // Click row → show detail pane
+        row.addEventListener("click", () => {
+          document.querySelectorAll(".cal-event-row").forEach(r => r.classList.remove("selected"));
+          row.classList.add("selected");
+          calPaneTitle.textContent     = ev.subject || "(No title)";
+          calPaneWhen.textContent      = fmtCalDate(startIso, ev.isAllDay) + (endIso ? " → " + fmtCalDate(endIso, ev.isAllDay) : "");
+          calPaneLoc.textContent       = ev.location?.displayName || "—";
+          calPaneOrganizer.textContent = ev.organizer?.emailAddress?.name || ev.organizer?.emailAddress?.address || "—";
+          calPaneAttendees.textContent = (ev.attendees ?? []).map(a => a.emailAddress?.name || a.emailAddress?.address).join(", ") || "—";
+          calPaneBody.textContent      = ev.bodyPreview || "";
+          calPane.style.display        = "block";
+          calPane.scrollIntoView({ behavior: "smooth", block: "nearest" });
+        });
+
+        calListWrap.appendChild(row);
+      });
+    }
+
+    // ── Load Calendar ─────────────────────────────────────────────────────────
+    btnLoadCalendar.addEventListener("click", async () => {
+      btnLoadCalendar.disabled = true;
+      btnLoadCalendar.textContent = "Loading…";
+
+      const { events, error } = await api.fetchCalendarEvents({
+        since: sinceDate.value || undefined,
+        limit: 200,
+      });
+
+      if (error) appendLog("⚠ Calendar error: " + error, "err");
+
+      _calEvents = events;
+      renderCalEvents(events);
+      calendarCard.style.display = "block";
+      calendarCard.scrollIntoView({ behavior: "smooth", block: "start" });
+
+      // Auto-select Calendar CSV format
+      document.querySelectorAll(".format-btn").forEach(b => b.classList.remove("active"));
+      document.querySelector(".format-btn[data-format='calendar-csv']").classList.add("active");
+      selectedFormat = "calendar-csv";
+      updateFieldVisibility();
+
+      btnLoadCalendar.disabled = false;
+      btnLoadCalendar.textContent = "📅 Refresh Calendar";
+    });
+
+    document.getElementById("btn-cal-select-all").addEventListener("click", () => {
+      document.querySelectorAll(".cal-event-row").forEach(row => {
+        const chk = row.querySelector("input[type=checkbox]");
+        if (chk && !chk.checked) { chk.checked = true; _calChecked.add(row.dataset.evId); row.classList.add("checked"); }
+      });
+      calSelectedCount.textContent = _calChecked.size;
+      calSelectedBar.style.display = _calChecked.size ? "flex" : "none";
+    });
+
+    document.getElementById("btn-cal-deselect-all").addEventListener("click", () => {
+      document.querySelectorAll(".cal-event-row").forEach(row => {
+        const chk = row.querySelector("input[type=checkbox]");
+        if (chk) { chk.checked = false; row.classList.remove("checked"); }
+      });
+      _calChecked.clear();
+      calSelectedCount.textContent = 0;
+      calSelectedBar.style.display = "none";
+    });
+
+    document.getElementById("btn-export-cal-events").addEventListener("click", () => {
+      const toExport = _calEvents.filter(ev => _calChecked.has(ev.id));
+      if (!toExport.length) return;
+      const headers = ["Subject","Start","End","All Day","Location","Organizer","Attendees","Body Preview","Cancelled","Web Link"];
+      const rows = toExport.map(ev => [
+        ev.subject ?? "",
+        ev.start?.dateTime ?? ev.start?.date ?? "",
+        ev.end?.dateTime   ?? ev.end?.date   ?? "",
+        ev.isAllDay ? "Yes" : "No",
+        ev.location?.displayName ?? "",
+        ev.organizer?.emailAddress?.address ?? "",
+        (ev.attendees ?? []).map(a => a.emailAddress?.address).join("; "),
+        (ev.bodyPreview ?? "").replace(/\n/g," "),
+        ev.isCancelled ? "Yes" : "No",
+        ev.webLink ?? "",
+      ]);
+      const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g,'""')}"`).join(",")).join("\n");
+      const ts  = new Date().toISOString().replace(/[:.]/g,"-").slice(0,19);
+      const blob = new Blob([csv], { type: "text/csv" });
+      const a  = document.createElement("a");
+      a.href   = URL.createObjectURL(blob);
+      a.download = `calendar_events_${ts}.csv`;
+      a.click();
+      URL.revokeObjectURL(a.href);
+    });
+
     // ── Run extraction ────────────────────────────────────────────────────────
     btnExtract.addEventListener("click", async () => {
       const folderIds = getCheckedFolderIds();
@@ -1740,7 +2015,12 @@
     // Resets the UI back to the configured state (folders/auth preserved) so
     // the user can adjust options and run another extraction without restarting.
     btnRunAgain.addEventListener("click", () => {
-      // Preserve authentication state across the reset
+      const wasAuthed = statusBadge.classList.contains("authed");
+      resetUI();
+      if (wasAuthed) setAuthenticated(true);
+    });
+
+    document.getElementById("btn-reset-all").addEventListener("click", () => {
       const wasAuthed = statusBadge.classList.contains("authed");
       resetUI();
       if (wasAuthed) setAuthenticated(true);
@@ -2293,10 +2573,10 @@
         chip.classList.toggle("on", state);
       }
 
-      // Domain filter → checked, value = .ibm.com, input enabled
-      chkFilterDomain.checked         = true;
+      // Domain filter → unchecked by default, value pre-filled, input disabled
+      chkFilterDomain.checked         = false;
       excludedDomainInput.value       = ".ibm.com";
-      excludedDomainInput.disabled    = false;
+      excludedDomainInput.disabled    = true;
 
       // All other checkboxes → unchecked
       document.getElementById("chk-flagged-only").checked    = false;

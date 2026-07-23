@@ -31,6 +31,17 @@ PID_FILE="$APP_DIR/output/electron-outlook.pid"
 mkdir -p "$APP_DIR/output"
 create_desktop_launcher
 
+# ── Write anchor config so packaged app can find project root ─────────────────
+# macOS open -a strips env vars; this file is the reliable alternative.
+# We also copy .env and .bob/mcp.json into the anchor dir so the binary works
+# even when launched by double-clicking (without running this script).
+ANCHOR_DIR="$HOME/.config/outlook-bob"
+mkdir -p "$ANCHOR_DIR"
+printf '{"projectRoot":"%s"}\n' "$SCRIPT_DIR" > "$ANCHOR_DIR/config.json"
+[ -f "$SCRIPT_DIR/.env" ]           && cp "$SCRIPT_DIR/.env"           "$ANCHOR_DIR/.env"
+[ -f "$SCRIPT_DIR/.bob/mcp.json" ]  && cp "$SCRIPT_DIR/.bob/mcp.json"  "$ANCHOR_DIR/mcp.json"
+echo "📌  Project root anchored → $ANCHOR_DIR/config.json"
+
 # ── Guard: already running? ────────────────────────────────────────────────────
 if [ -f "$PID_FILE" ]; then
     OLD_PID=$(cat "$PID_FILE")
@@ -85,8 +96,9 @@ if [ -d "$ELECTRON_APP" ]; then
     # macOS: use `open -a` to launch the .app bundle properly so macOS initialises
     # the full Chromium/browser process context. Pass the app directory via
     # --args so Electron can find package.json → dist/main.js.
-    # We log to file by redirecting stdout/stderr of the open command itself.
-    open -a "$ELECTRON_APP" --args "$APP_DIR" > "$LOG_FILE" 2>&1 &
+    # OUTLOOK_BOB_ROOT tells main.ts where to find .env and .bob/mcp.json
+    # regardless of what cwd macOS assigns to the process.
+    OUTLOOK_BOB_ROOT="$SCRIPT_DIR" open -a "$ELECTRON_APP" --args "$APP_DIR" > "$LOG_FILE" 2>&1 &
     LAUNCHER_PID=$!
     echo $LAUNCHER_PID > "$PID_FILE"
     echo "✅  Desktop window launched."

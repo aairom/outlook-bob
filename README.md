@@ -1,6 +1,6 @@
 # Outlook Folder Extractor
 
-A native Electron desktop app that connects to your **Microsoft 365 mailbox** via the Graph API (OAuth 2.0 PKCE — no password stored), lets you pick any folders interactively, and exports your emails in your chosen format. The app also integrates with **Monday.com** — you can browse your boards directly from the app sidebar using your Monday API token.
+A native Electron desktop app that connects to your **Microsoft 365 mailbox** via the Graph API (OAuth 2.0 PKCE — no password stored), lets you pick any folders interactively, and exports your emails or **calendar events** in your chosen format. The app also integrates with **Monday.com** — you can browse your boards directly from the app sidebar using your Monday API token.
 
 ## Architecture
 
@@ -11,7 +11,10 @@ flowchart TD
     C --> D[Token cached\n~/.cache/extract_outlook_token_folder.json]
     B -- Yes --> D
     D --> E[Load Folders\nGET /me/mailFolders recursive]
+    D --> CAL[Load Calendar\nGET /me/calendarView\nRequires Calendars.Read in Azure App Registration]
     E --> F[Folder tree rendered\nwith checkboxes + item counts]
+    CAL --> CALV[Calendar Events card\nScrollable by day · checkboxes\nDetail pane on click]
+    CALV --> CALX[Export selected as CSV\ncalendar_events_TIMESTAMP.csv]
     F --> G[User selects folders\n+ export format + field options\n+ filters + save attachments toggle\n+ ZIP toggle]
     G --> H{Format chosen}
     H -- Preview --> P[👁 Preview Emails\nGET messages, no file written\nup to 200 on-screen]
@@ -42,6 +45,32 @@ flowchart TD
 | **JSON** | Structured array of message objects, plus Outlook identifiers | Data processing / scripting |
 | **SQLite** | Persistent `output/emails.sqlite` — idempotent upsert, re-run safe, with Outlook identifiers | Queryable store, incremental syncs |
 | **Preview** | No file written — emails shown on-screen with reading pane + live search | Browse & search messages without exporting |
+| **Calendar CSV** | Selected calendar events exported as CSV | Export meetings and appointments |
+
+## Calendar Feature
+
+Click **📅 Load Calendar** in the header to fetch your Microsoft 365 calendar events (from today, up to 6 months ahead). Events are displayed in a dedicated **Calendar Events** card:
+
+- Grouped by **day** with a sticky header per day (today's row is highlighted)
+- Each row shows: event title · time range · location
+- Click any row to open a **detail pane** with full when/where/organiser/attendees/description
+- Tick checkboxes to select events, then click **⬇ Export selected as CSV** to download a timestamped `calendar_events_TIMESTAMP.csv`
+
+### ⚠️ Azure App Registration required
+
+The calendar feature requires the **`Calendars.Read` delegated permission** to be declared in the Azure App Registration used by this app.
+
+> **This does NOT require IT admin consent.** `Calendars.Read` delegated is user-consented — only the app owner needs to add it to the registration.
+
+**To enable calendar access:**
+
+1. Go to [portal.azure.com](https://portal.azure.com) → **Entra ID → App registrations**
+2. Search for App ID: `14d82eec-204b-4c2f-b7e8-296a70dab67e`
+3. Click **API permissions → Add a permission → Microsoft Graph → Delegated permissions**
+4. Search for and select **`Calendars.Read`** → click **Add permissions**
+5. Re-authenticate once in the app (click **Reconnect** or delete `~/.cache/extract_outlook_token_folder.json`)
+
+Until this is done, clicking **📅 Load Calendar** shows a clear explanation message in the Progress log — no crash, no broken auth. All email features continue to work normally.
 
 ## Field Options (CSV / JSON / SQLite / EML)
 
@@ -100,7 +129,7 @@ The selection bar shows a live status:
 | "Exclude addresses containing" | Skips addresses containing the given substring (default: `.ibm.com`) |
 | 🚩 "Flagged emails only" | Filters flagged/follow-up messages; applies to Preview and all export formats |
 | 📎 "Also save attachment files to disk" | Saves binary attachment files to `output/attachments_TIMESTAMP/<Folder>/`; combinable with every export format; file type filterable (PDF, Word, PowerPoint, Excel, Images) |
-| "Scan emails since" | Restricts to messages on or after the chosen date; applies to Preview and all export formats |
+| "Scan emails / calendar events since" | Restricts messages **and** calendar events to on or after the chosen date |
 | 📦 "Compress output as ZIP file" | Compresses the primary export into a `.zip` archive; original is removed (hidden in Preview mode) |
 | "👁 Load up to N emails" | Preview mode only — caps messages fetched for on-screen display (50 / 100 / 200) |
 
@@ -114,8 +143,9 @@ The selection bar shows a live status:
 | npm 9+ | Build only | `npm --version` |
 | Microsoft 365 account | Always | — |
 | Monday.com account | Monday Boards feature only | — |
+| `Calendars.Read` in Azure App Registration | Calendar feature only | See [Calendar Feature](#calendar-feature) |
 
-No Azure App Registration needed — uses Microsoft's public Graph Explorer client by default.
+No Azure App Registration needed for email features — uses Microsoft's public Graph Explorer client by default. The Calendar feature requires a one-time addition of `Calendars.Read` to the app registration (see above).
 
 The Monday.com integration requires a valid API token in workspace-root `.bob/mcp.json`, or `MONDAY_API_TOKEN` in workspace-root `.env`. If the Monday MCP server is already configured, no extra steps are needed.
 
