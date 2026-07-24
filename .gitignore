@@ -55,3 +55,7 @@ presentation/
 
 # Generated HTML files in Docs
 Docs/*.html
+
+# Presentation launch/stop scripts (local dev helpers)
+scripts/start-presentation.sh
+scripts/stop-presentation.sh
