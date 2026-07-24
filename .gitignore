@@ -49,3 +49,9 @@ prompts/*
 *.tgz
 *.tar.gz
 *.zip
+
+# Presentation app (generated React/Vite project)
+presentation/
+
+# Generated HTML files in Docs
+Docs/*.html
